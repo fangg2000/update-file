@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频控制画线工具</title>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <!-- jQuery EasyUI -->
+    <link rel="stylesheet" type="text/css" href="https://www.jeasyui.com/easyui/themes/default/easyui.css">
+    <link rel="stylesheet" type="text/css" href="https://www.jeasyui.com/easyui/themes/icon.css">
+    <script type="text/javascript" src="https://www.jeasyui.com/easyui/jquery.easyui.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fa;
+            padding: 20px;
+            color: #333;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            padding: 25px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eaeaea;
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            color: #7f8c8d;
+            font-size: 16px;
+        }
+        
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+        
+        .upload-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            justify-content: center;
+        }
+        
+        .upload-area {
+            flex: 1;
+            min-width: 300px;
+            max-width: 500px;
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+            border: 2px dashed #d1d9e6;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: #3498db;
+            background-color: #f0f7ff;
+        }
+        
+        .upload-area h3 {
+            color: #3498db;
+            margin-bottom: 15px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .upload-area h3 i {
+            font-size: 24px;
+        }
+        
+        .upload-box {
+            border: 2px dashed #bdc3c7;
+            border-radius: 8px;
+            padding: 25px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background-color: white;
+            margin-bottom: 15px;
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .upload-box:hover {
+            border-color: #3498db;
+            background-color: #f8fafc;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            color: #95a5a6;
+            margin-bottom: 15px;
+        }
+        
+        .upload-box p {
+            color: #7f8c8d;
+            margin-bottom: 10px;
+        }
+        
+        .file-info {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #ecf0f1;
+            border-radius: 6px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .preview-img {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 6px;
+            margin-top: 15px;
+            display: none;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .canvas-section {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .canvas-container {
+            display: inline-block;
+            margin: 20px auto;
+            position: relative;
+        }
+        
+        .instructions {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #3498db;
+        }
+        
+        .instructions h3 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+            color: #555;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        
+        .control-panel {
+            background-color: #f1f8ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            border: 1px solid #d1e3ff;
+        }
+        
+        .video-preview {
+            margin-top: 30px;
+            text-align: center;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        .video-preview h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+        
+        #resultDrawLine4Video {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
+        }
+        
+        .t2i-fill-mask-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn-primary {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            margin: 5px;
+        }
+        
+        .btn-primary:hover {
+            background-color: #2980b9;
+        }
+        
+        .btn-success {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            margin: 5px;
+        }
+        
+        .btn-success:hover {
+            background-color: #27ae60;
+        }
+        
+        .btn-warning {
+            background-color: #e67e22;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            margin: 5px;
+        }
+        
+        .btn-warning:hover {
+            background-color: #d35400;
+        }
+        
+        .status-bar {
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            margin-top: 20px;
+            text-align: center;
+            font-size: 14px;
+            color: #555;
+        }
+        
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .color-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+        
+        @media (max-width: 768px) {
+            .upload-section {
+                flex-direction: column;
+            }
+            
+            .upload-area {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>视频控制画线工具</h1>
+            <p>在图片上绘制矩形并录制运动轨迹，生成动态视频</p>
+            <input type="file" id="bgImageInput" accept="image/*" style="display: none;">
+            <input type="file" id="editImageInput" accept="image/*" style="display: none;">
+        </div>
+        
+        <div class="main-content">
+            <!-- 上传区域 -->
+            <div class="upload-section">
+                <div class="upload-area">
+                    <h3><i>📷</i> A - Canvas背景图片</h3>
+                    <p>上传作为Canvas背景的图片，用于在其上绘制矩形和轨迹</p>
+                    <div class="upload-box" id="bgImageUpload">
+                        <div class="upload-icon">📁</div>
+                        <p>点击或拖放图片文件到此区域</p>
+                        <p><small>支持 JPG、PNG 格式，建议尺寸 800×600 以上</small></p>
+                    </div>
+                    <div class="file-info" id="bgImageInfo"></div>
+                    <img id="bgImagePreview" class="preview-img" src="" alt="背景图片预览">
+                    <button class="btn-primary" id="useBgImageBtn" style="display: none; width: 100%;">使用此图片作为背景</button>
+                </div>
+                
+                <div class="upload-area">
+                    <h3><i>🎬</i> B - 可选编辑图片 (edit_img)</h3>
+                    <p>上传作为视频生成时的编辑图片（可选），将替换原背景</p>
+                    <div class="upload-box" id="editImageUpload">
+                        <div class="upload-icon">📁</div>
+                        <p>点击或拖放图片文件到此区域</p>
+                        <p><small>可选，用于生成视频时替换背景</small></p>
+                    </div>
+                    <div class="file-info" id="editImageInfo"></div>
+                    <img id="editImagePreview" class="preview-img" src="" alt="编辑图片预览">
+                    <div id="editImageStatus" style="margin-top: 10px; font-size: 14px; color: #7f8c8d;"></div>
+                </div>
+            </div>
+            
+            <!-- 控制区域 -->
+            <div class="control-panel">
+                <h3 style="text-align: center; margin-bottom: 20px; color: #2c3e50;">画布控制</h3>
+                
+                <div style="text-align: center;">
+                    <button class="btn-primary" id="openCanvasBtn">打开画布</button>
+                    <button class="btn-warning" id="clearCanvasBtn" style="display: none;">清空画布</button>
+                </div>
+                
+                <!-- 工具栏容器 -->
+                <div id="t2video_edit_dl4v_toolbar_pool" style="display:none;text-align: center;line-height:32px;padding:10px 0px; margin-top: 0px;">
+                    <div style="width:350px; line-height:32px;display: inline-block;">
+                        <div style="width:100px; display: inline-block;">对象描述：</div>
+                        <div style="width:180px;position: relative;top:0px;display: inline-block;">
+                            <input id="t2video_dl4v_replacePrompt" type="text" class="easyui-textbox" data-options="prompt:'移除对象名称（效果更佳）'">
+                        </div>
+                    </div>
+                    <div style="width:250px; line-height:32px;display: inline-block;">
+                        <div style="width:60px; display: inline-block;">时长：</div>
+                        <div style="width:150px;position: relative;top:10px;display: inline-block;">
+                            <input id="t2video_dl4v_duration" class="easyui-slider" style="width:150px;" value="3" data-options="min:1,max:10,step:1,showTip:true">
+                        </div>
+                    </div>
+                    <div style="width:450px; line-height:32px;display: inline-block;">
+                        <div style="width:100%; display: inline-block; text-align: center;">
+                            <a id="t2video_dl4v_reset" class="easyui-linkbutton" data-options="iconCls:'',disabled:true" href="javascript:void(0)" style="width:80px;">重置</a>
+                            <a id="t2video_dl4v_set" class="easyui-linkbutton" data-options="iconCls:''" href="javascript:void(0)" style="width:70px;">轨迹</a>
+                            <a id="t2video_dl4v_ok" class="easyui-linkbutton" data-options="iconCls:''" href="javascript:void(0)" style="width:70px;">生成</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 使用说明 -->
+            <div class="instructions">
+                <h3>使用说明</h3>
+                <ul>
+                    <li><strong>步骤1：</strong>上传背景图片（A区域）并点击"使用此图片作为背景"</li>
+                    <li><strong>步骤2：</strong>点击"打开画布"按钮，在图片上绘制矩形（点击并拖拽）</li>
+                    <li><strong>步骤3：</strong>点击"轨迹"按钮开始录制，然后拖动矩形创建运动轨迹</li>
+                    <li><strong>步骤4：</strong>点击"生成"按钮创建视频（可选择上传B图片用于视频背景替换）</li>
+                    <li><strong>控制提示：</strong>
+                        <ul>
+                            <li>按住Ctrl键或鼠标中键拖动画布可以平移视图</li>
+                            <li>使用鼠标滚轮可以缩放视图</li>
+                            <li>使用方向键可以微调视图位置</li>
+                            <li>按Home键重置视图</li>
+                        </ul>
+                    </li>
+                    <li><strong>可选功能：</strong>上传B图片可在生成视频时替换背景，实现对象移除效果</li>
+                </ul>
+            </div>
+            
+            <!-- 视频预览区域 -->
+            <div class="video-preview" id="dl4VideoPreview">
+                <h3>生成的视频</h3>
+                <video id="resultDrawLine4Video" controls></video>
+                <div style="margin-top: 15px;">
+                    <a id="downloadDL4Video" class="btn-success" download="generated_video.webm">下载视频</a>
+                </div>
+            </div>
+            
+            <!-- 状态栏 -->
+            <div class="status-bar" id="statusBar">
+                就绪。请先上传背景图片并打开画布。
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>视频控制画线工具 | 基于Canvas和MediaRecorder技术</p>
+            <p style="font-size: 12px; margin-top: 5px;">提示：部分功能需要现代浏览器支持（Chrome 65+, Firefox 63+, Edge 79+）</p>
+        </div>
+    </div>
+    
+    <!-- 隐藏的输入框，用于存储图片路径 -->
+    <input type="hidden" id="t2videoEditPath" value="">
+    
+    <script>
+        // 全局变量
+        let editImage = null; // 存储B图片
+        
+        $(document).ready(function() {
+            // 初始化EasyUI组件
+            $('#t2video_dl4v_replacePrompt').textbox();
+            $('#t2video_dl4v_duration').slider();
+            $('#t2video_dl4v_reset').linkbutton();
+            $('#t2video_dl4v_set').linkbutton();
+            $('#t2video_dl4v_ok').linkbutton();
+            
+            // 更新状态栏
+            function updateStatus(message, type = 'info') {
+                const statusBar = $('#statusBar');
+                statusBar.text(message);
+                
+                if (type === 'error') {
+                    statusBar.css('background-color', '#ffeaea');
+                    statusBar.css('color', '#e74c3c');
+                } else if (type === 'success') {
+                    statusBar.css('background-color', '#eaffea');
+                    statusBar.css('color', '#27ae60');
+                } else {
+                    statusBar.css('background-color', '#f8f9fa');
+                    statusBar.css('color', '#555');
+                }
+                
+                console.log('状态:', message);
+            }
+            
+            let canvasBackgroundImage = null; // 存储A图片
+            let canvasBackgroundImageUrl = null; // 存储A图片的URL
+            
+            // 模拟消息提示函数
+            function centerMsg(message, type) {
+                alert(`${type === 'error' ? '错误' : '警告'}: ${message}`);
+                updateStatus(message, type);
+            }
+            
+            function slideMsg(message) {
+                console.log('消息:', message);
+                updateStatus(message, 'success');
+            }
+            
+            // 图片上传处理函数
+            function setupImageUpload(uploadBoxId, fileInputId, previewId, infoId, isBgImage = false) {
+                const uploadBox = $(`#${uploadBoxId}`);
+                const fileInput = $(`#${fileInputId}`);
+                const preview = $(`#${previewId}`);
+                const info = $(`#${infoId}`);
+                
+                
+                // 拖放功能
+                uploadBox.on('dragover', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    uploadBox.css('border-color', '#3498db');
+                    uploadBox.css('background-color', '#f0f7ff');
+                });
+                
+                uploadBox.on('dragleave', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    uploadBox.css('border-color', '#bdc3c7');
+                    uploadBox.css('background-color', 'white');
+                });
+                
+                uploadBox.on('drop', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    uploadBox.css('border-color', '#bdc3c7');
+                    uploadBox.css('background-color', 'white');
+                    
+                    const files = e.originalEvent.dataTransfer.files;
+                    if (files.length > 0) {
+                        handleImageFile(files[0], isBgImage);
+                    }
+                });
+                
+                // 文件选择变化
+                fileInput.on('change', function(e) {
+                    if (this.files && this.files[0]) {
+                        handleImageFile(this.files[0], isBgImage);
+                    }
+                });
+                
+                function handleImageFile(file, isBackground) {
+                    // 检查文件类型
+                    if (!file.type.match('image.*')) {
+                        alert('请选择图片文件！');
+                        return;
+                    }
+                    
+                    // 更新文件信息
+                    const fileName = file.name.length > 20 ? file.name.substring(0, 20) + '...' : file.name;
+                    info.html(`<strong>已选择:</strong> ${fileName} (${(file.size / 1024).toFixed(1)} KB)`);
+                    info.show();
+                    
+                    // 创建预览
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        preview.attr('src', e.target.result);
+                        preview.show();
+                        
+                        // 创建图片对象
+                        const img = new Image();
+                        img.onload = function() {
+                            if (isBackground) {
+                                canvasBackgroundImage = img;
+                                canvasBackgroundImageUrl = e.target.result;
+                                $('#useBgImageBtn').show();
+                                updateStatus(`背景图片已加载: ${img.width}×${img.height} 像素`, 'success');
+                            } else {
+                                editImage = img;
+                                $('#editImageStatus').html(`<span style="color: #27ae60;">✓ 编辑图片已加载: ${img.width}×${img.height} 像素</span>`);
+                                updateStatus(`编辑图片已加载，将在生成视频时使用`, 'success');
+                            }
+                        };
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+            
+            // 初始化图片上传
+            setupImageUpload('bgImageUpload', 'bgImageInput', 'bgImagePreview', 'bgImageInfo', true);
+            setupImageUpload('editImageUpload', 'editImageInput', 'editImagePreview', 'editImageInfo', false);
+            
+            
+            // 点击上传区域触发文件选择
+            $("#bgImageUpload").on('click', function() {
+                //fileInput.click();
+                $("#bgImageInput").trigger("click");
+            });
+            
+            $("#editImageUpload").on('click', function() {
+                //fileInput.click();
+                $("#editImageInput").trigger("click");
+            });
+            
+            // 使用背景图片按钮
+            $('#useBgImageBtn').on('click', function() {
+                if (!canvasBackgroundImage) {
+                    alert('请先上传背景图片！');
+                    return;
+                }
+                updateStatus('背景图片已设置，可以打开画布了', 'success');
+            });
+            
+            // 打开画布按钮
+            $('#openCanvasBtn').on('click', function() {
+                if (!canvasBackgroundImage) {
+                    alert('请先上传背景图片并点击"使用此图片作为背景"按钮！');
+                    return;
+                }
+                
+                // 调用control4Video函数
+                control4Video('demo_video', canvasBackgroundImageUrl);
+                $('#clearCanvasBtn').show();
+                updateStatus('画布已打开，可以开始绘制矩形', 'success');
+            });
+            
+            // 清空画布按钮
+            $('#clearCanvasBtn').on('click', function() {
+                $('.t2i-fill-mask-layer').remove();
+                updateStatus('画布已关闭', 'info');
+                $(this).hide();
+            });
+        });
+        
+        // control4Video函数 - 主功能
+        function control4Video(video_id, img_path_in) {
+            /********************************************************************** 画线层 *********************************************************************/
+            let dragger_box;
+            let original_width = 0;
+            let original_height = 0;
+
+            const body = $('body'); 
+            const mask = $('<div class="t2i-fill-mask-layer">')
+                .appendTo(body)
+                .on('click', function(e) {
+                    if (e.target === this) {
+                        $('#t2video_edit_dl4v_toolbar_pool').appendTo($('#w_t2i_edit')).css({'display': 'none'});
+                        document.getElementById('t2video_dl4v_reset').removeEventListener('click', resetCanvas);
+                        document.getElementById('t2video_dl4v_set').removeEventListener('click', startRecording);
+                        document.getElementById('t2video_dl4v_ok').removeEventListener('click', stopRecording);
+                        $(this).remove();
+                        $('#clearCanvasBtn').hide();
+                        $('#statusBar').text('画布已关闭');
+                    }
+                });
+            
+            let toolbar = $('#t2video_edit_dl4v_toolbar_pool')
+                .appendTo(mask)
+                .css({
+                    'width': '100%',
+                    'height': 'auto',
+                    'background-color': 'white',
+                    'position': 'absolute',
+                    'top': '0px',
+                    'left': '50%',
+                    'transform': 'translateX(-50%)',
+                    'display': 'block',
+                    'z-index': 10001,
+                    'padding': '10px',
+                    'box-shadow': '0 2px 10px rgba(0,0,0,0.2)'
+                }); 
+            
+            // 先创建canvas容器，稍后设置具体尺寸
+            let canvasContainer = $('<div id="t2videoCanvasContainer" style="text-align: center; margin-top: 50px; overflow: visible;"></div>').appendTo(mask);
+            let cache_canvas = $('<canvas id="t2videoControlCanvas"></canvas>').appendTo(canvasContainer);
+            
+            /********************************************************************** 画线 *********************************************************************/
+            const canvas = document.getElementById('t2videoControlCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            let rectangles = [];
+            let selectedRectIndex = -1;
+            let isDragging = false;
+            let dragOffsetX, dragOffsetY;
+            let isRecording = false;
+            let isDrawing = false;
+            let drawingStartX, drawingStartY;
+            let currentDrawingRect = null;
+            
+            let backgroundImage = null;
+            let viewOffsetX = 0; // 视图偏移量
+            let viewOffsetY = 0;
+            let isPanning = false;
+            let panStartX, panStartY;
+            
+            const colors = [
+                '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
+                '#98D8C8', '#F78FB3', '#F8EFBA', '#9B59B6'
+            ];
+
+            $('#downloadDL4Video').off('click');
+            $('#downloadDL4Video').click(function() {
+                console.log('下载视频...');
+            });
+            
+            function init() {
+                canvas.addEventListener('mousedown', handleMouseDown);
+                canvas.addEventListener('mousemove', handleMouseMove);
+                canvas.addEventListener('mouseup', handleMouseUp);
+                canvas.addEventListener('mouseout', handleMouseUp);
+                canvas.addEventListener('wheel', handleMouseWheel);
+                
+                // 添加键盘事件用于平移视图
+                document.addEventListener('keydown', handleKeyDown);
+                
+                document.getElementById('t2video_dl4v_reset').addEventListener('click', resetCanvas);
+                document.getElementById('t2video_dl4v_set').addEventListener('click', startRecording);
+                document.getElementById('t2video_dl4v_ok').addEventListener('click', stopRecording);
+                
+                loadImage();
+            }
+            
+            function loadImage() {
+                backgroundImage = new Image();
+                backgroundImage.onload = function() {
+                    // 设置canvas尺寸与图片保持一致
+                    canvas.width = backgroundImage.width;
+                    canvas.height = backgroundImage.height;
+                    
+                    // 更新canvas样式，设置最大宽度和高度以防止过大
+                    const maxWidth = 1200;
+                    const maxHeight = 760;
+                    
+                    let width = backgroundImage.width;
+                    let height = backgroundImage.height;
+                    
+                    // 如果图片尺寸超过最大值，等比例缩放
+                    if (width > maxWidth || height > maxHeight) {
+                        const widthRatio = maxWidth / width;
+                        const heightRatio = maxHeight / height;
+                        const scale = Math.min(widthRatio, heightRatio);
+                        
+                        width = Math.floor(width * scale);
+                        height = Math.floor(height * scale);
+                    }
+                    
+                    $(canvas).css({
+                        'width': width + 'px',
+                        'height': height + 'px',
+                        'border': '1px solid #ddd',
+                        'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
+                        'cursor': 'grab'
+                    });
+                    
+                    drawCanvas();
+                    $('#statusBar').text('画布已打开，可以开始绘制矩形');
+                };
+                backgroundImage.onerror = function() {
+                    console.error('图片加载失败:', img_path_in);
+                    // 如果图片加载失败，使用默认尺寸
+                    canvas.width = 800;
+                    canvas.height = 600;
+                    drawCanvas();
+                };
+                backgroundImage.src = img_path_in;
+            }
+            
+            // 截取图片区域作为矩形背景
+            function captureImageArea(rect) {
+                if (!backgroundImage) return null;
+                
+                // 创建一个临时canvas来截取图片区域
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                // 由于canvas与图片尺寸一致，直接使用矩形坐标
+                const sourceX = rect.x;
+                const sourceY = rect.y;
+                const sourceWidth = rect.width;
+                const sourceHeight = rect.height;
+                
+                // 确保不超出图片边界
+                const safeSourceX = Math.max(0, Math.min(sourceX, backgroundImage.width - 1));
+                const safeSourceY = Math.max(0, Math.min(sourceY, backgroundImage.height - 1));
+                const safeSourceWidth = Math.max(1, Math.min(sourceWidth, backgroundImage.width - safeSourceX));
+                const safeSourceHeight = Math.max(1, Math.min(sourceHeight, backgroundImage.height - safeSourceY));
+                
+                // 设置临时canvas尺寸
+                tempCanvas.width = safeSourceWidth;
+                tempCanvas.height = safeSourceHeight;
+                
+                // 绘制截取的区域
+                tempCtx.drawImage(
+                    backgroundImage,
+                    safeSourceX, safeSourceY, safeSourceWidth, safeSourceHeight,
+                    0, 0, safeSourceWidth, safeSourceHeight
+                );
+                
+                // 创建新的Image对象
+                const croppedImage = new Image();
+                croppedImage.src = tempCanvas.toDataURL();
+                return croppedImage;
+            }
+            
+            function handleMouseDown(e) {
+                const rectCanvas = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rectCanvas.width;
+                const scaleY = canvas.height / rectCanvas.height;
+                
+                const mouseX = (e.clientX - rectCanvas.left) * scaleX;
+                const mouseY = (e.clientY - rectCanvas.top) * scaleY;
+                
+                // 按下空格键或中键时开始平移
+                if (e.ctrlKey || e.button === 1) { // Ctrl键或中键
+                    isPanning = true;
+                    panStartX = mouseX + viewOffsetX;
+                    panStartY = mouseY + viewOffsetY;
+                    $(canvas).css('cursor', 'grabbing');
+                    return;
+                }
+                
+                // 调整鼠标坐标为考虑视图偏移
+                const adjustedMouseX = mouseX + viewOffsetX;
+                const adjustedMouseY = mouseY + viewOffsetY;
+                
+                // 检查点击了哪个矩形（从后往前检查）
+                for (let i = rectangles.length - 1; i >= 0; i--) {
+                    const rect = rectangles[i];
+                    if (adjustedMouseX >= rect.x && adjustedMouseX <= rect.x + rect.width && 
+                        adjustedMouseY >= rect.y && adjustedMouseY <= rect.y + rect.height) {
+                        
+                        selectedRectIndex = i;
+                        isDragging = true;
+                        dragOffsetX = adjustedMouseX - rect.x;
+                        dragOffsetY = adjustedMouseY - rect.y;
+                        
+                        // 录制时记录轨迹起点
+                        if (isRecording) {
+                            rect.trajectory.push({
+                                x: rect.x,
+                                y: rect.y,
+                                width: rect.width,
+                                height: rect.height,
+                                timestamp: Date.now()
+                            });
+                        }
+                        
+                        drawCanvas();
+                        return;
+                    }
+                }
+                
+                // 没有点击任何矩形，开始绘制新矩形
+                isDrawing = true;
+                drawingStartX = adjustedMouseX;
+                drawingStartY = adjustedMouseY;
+                
+                // 创建临时绘制矩形
+                currentDrawingRect = {
+                    x: adjustedMouseX,
+                    y: adjustedMouseY,
+                    width: 0,
+                    height: 0,
+                    color: colors[rectangles.length % colors.length],
+                    backgroundImage: null
+                };
+            }
+            
+            function handleMouseMove(e) {
+                const rectCanvas = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rectCanvas.width;
+                const scaleY = canvas.height / rectCanvas.height;
+                
+                const mouseX = (e.clientX - rectCanvas.left) * scaleX;
+                const mouseY = (e.clientY - rectCanvas.top) * scaleY;
+                
+                // 处理平移视图
+                if (isPanning) {
+                    viewOffsetX = panStartX - mouseX;
+                    viewOffsetY = panStartY - mouseY;
+                    drawCanvas();
+                    return;
+                }
+                
+                // 调整鼠标坐标为考虑视图偏移
+                const adjustedMouseX = mouseX + viewOffsetX;
+                const adjustedMouseY = mouseY + viewOffsetY;
+                
+                if (isDragging && selectedRectIndex !== -1) {
+                    const rect = rectangles[selectedRectIndex];
+                    rect.x = adjustedMouseX - dragOffsetX;
+                    rect.y = adjustedMouseY - dragOffsetY;
+                    
+                    // 移除边界限制，允许矩形自由移动
+                    // 不限制矩形移动范围
+                    
+                    // 录制时记录轨迹
+                    if (isRecording) {
+                        rect.trajectory.push({
+                            x: rect.x,
+                            y: rect.y,
+                            width: rect.width,
+                            height: rect.height,
+                            timestamp: Date.now()
+                        });
+                    }
+                    
+                    drawCanvas();
+                } else if (isDrawing && currentDrawingRect) {
+                    // 更新临时绘制矩形
+                    currentDrawingRect.width = adjustedMouseX - drawingStartX;
+                    currentDrawingRect.height = adjustedMouseY - drawingStartY;
+                    
+                    // 确保宽度和高度为正数
+                    if (currentDrawingRect.width < 0) {
+                        currentDrawingRect.x = adjustedMouseX;
+                        currentDrawingRect.width = -currentDrawingRect.width;
+                    }
+                    if (currentDrawingRect.height < 0) {
+                        currentDrawingRect.y = adjustedMouseY;
+                        currentDrawingRect.height = -currentDrawingRect.height;
+                    }
+                    
+                    drawCanvas();
+                }
+            }
+            
+            function handleMouseUp(e) {
+                if (isPanning) {
+                    isPanning = false;
+                    $(canvas).css('cursor', 'grab');
+                } else if (isDragging) {
+                    isDragging = false;
+                } else if (isDrawing && currentDrawingRect) {
+                    const rectCanvas = canvas.getBoundingClientRect();
+                    const scaleX = canvas.width / rectCanvas.width;
+                    const scaleY = canvas.height / rectCanvas.height;
+                    
+                    const mouseX = (e.clientX - rectCanvas.left) * scaleX;
+                    const mouseY = (e.clientY - rectCanvas.top) * scaleY;
+                    
+                    // 调整鼠标坐标为考虑视图偏移
+                    const adjustedMouseX = mouseX + viewOffsetX;
+                    const adjustedMouseY = mouseY + viewOffsetY;
+                    
+                    const width = Math.abs(adjustedMouseX - drawingStartX);
+                    const height = Math.abs(adjustedMouseY - drawingStartY);
+                    
+                    const x = Math.min(drawingStartX, adjustedMouseX);
+                    const y = Math.min(drawingStartY, adjustedMouseY);
+                    
+                    // 添加新矩形（最小尺寸为5px）
+                    if (width > 5 && height > 5) {
+                        const newRect = {
+                            x,
+                            y,
+                            width,
+                            height,
+                            color: colors[rectangles.length % colors.length],
+                            trajectory: [],
+                            backgroundImage: null // 初始化背景图片
+                        };
+                        
+                        // 只在创建时截取一次图片作为背景
+                        newRect.backgroundImage = captureImageArea(newRect);
+                        
+                        rectangles.push(newRect);
+                    }
+                    
+                    isDrawing = false;
+                    currentDrawingRect = null;
+                    drawCanvas();
+                }
+            }
+            
+            function handleMouseWheel(e) {
+                e.preventDefault();
+                
+                // 使用滚轮缩放视图
+                const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                
+                // 计算缩放前后的坐标变化
+                const rectCanvas = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rectCanvas.width;
+                const scaleY = canvas.height / rectCanvas.height;
+                
+                const mouseX = (e.clientX - rectCanvas.left) * scaleX;
+                const mouseY = (e.clientY - rectCanvas.top) * scaleY;
+                
+                // 调整视图偏移以实现缩放效果
+                viewOffsetX = viewOffsetX + mouseX * delta;
+                viewOffsetY = viewOffsetY + mouseY * delta;
+                
+                drawCanvas();
+            }
+            
+            function handleKeyDown(e) {
+                // 使用方向键平移视图
+                const step = 20;
+                
+                switch(e.key) {
+                    case 'ArrowLeft':
+                        viewOffsetX += step;
+                        break;
+                    case 'ArrowRight':
+                        viewOffsetX -= step;
+                        break;
+                    case 'ArrowUp':
+                        viewOffsetY += step;
+                        break;
+                    case 'ArrowDown':
+                        viewOffsetY -= step;
+                        break;
+                    case 'Home':
+                        // 重置视图
+                        viewOffsetX = 0;
+                        viewOffsetY = 0;
+                        break;
+                }
+                
+                drawCanvas();
+            }
+            
+            // 绘制Canvas
+            function drawCanvas() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // 保存当前状态
+                ctx.save();
+                
+                // 应用视图偏移（平移）
+                ctx.translate(-viewOffsetX, -viewOffsetY);
+                
+                // 绘制背景图片（从0,0开始）
+                if (backgroundImage) {
+                    ctx.drawImage(
+                        backgroundImage, 
+                        0, 
+                        0, 
+                        canvas.width, 
+                        canvas.height
+                    );
+                } else {
+                    // 如果没有图片，绘制网格背景
+                    drawGrid();
+                }
+                
+                // 绘制所有矩形
+                rectangles.forEach((rect, index) => {
+                    // 如果有背景图片，绘制背景图片
+                    if (rect.backgroundImage && rect.backgroundImage.complete) {
+                        // 填充矩形背景为截取的图片
+                        ctx.drawImage(
+                            rect.backgroundImage,
+                            rect.x, rect.y, rect.width, rect.height
+                        );
+                    } else {
+                        // 否则使用半透明颜色
+                        ctx.fillStyle = rect.color + '80';
+                        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+                    }
+                    
+                    // 绘制边框
+                    ctx.strokeStyle = index === selectedRectIndex ? '#FFD166' : 'rgba(255, 255, 255, 0.7)';
+                    ctx.lineWidth = index === selectedRectIndex ? 3 : 2;
+                    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+                    
+                    // 绘制中心点
+                    ctx.fillStyle = '#EF476F';
+                    ctx.beginPath();
+                    ctx.arc(rect.x + rect.width/2, rect.y + rect.height/2, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                
+                // 绘制当前正在绘制的矩形
+                if (isDrawing && currentDrawingRect) {
+                    ctx.fillStyle = currentDrawingRect.color + '80';
+                    ctx.fillRect(
+                        currentDrawingRect.x, 
+                        currentDrawingRect.y, 
+                        currentDrawingRect.width, 
+                        currentDrawingRect.height
+                    );
+                    
+                    ctx.strokeStyle = '#FFD166';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(
+                        currentDrawingRect.x, 
+                        currentDrawingRect.y, 
+                        currentDrawingRect.width, 
+                        currentDrawingRect.height
+                    );
+                }
+                
+                // 绘制轨迹（录制时显示）
+                if (isRecording) {
+                    rectangles.forEach(rect => {
+                        if (rect.trajectory.length > 1) {
+                            ctx.beginPath();
+                            ctx.moveTo(
+                                rect.trajectory[0].x + rect.trajectory[0].width/2, 
+                                rect.trajectory[0].y + rect.trajectory[0].height/2
+                            );
+                            
+                            for (let i = 1; i < rect.trajectory.length; i++) {
+                                ctx.lineTo(
+                                    rect.trajectory[i].x + rect.trajectory[i].width/2, 
+                                    rect.trajectory[i].y + rect.trajectory[i].height/2
+                                );
+                            }
+                            
+                            ctx.strokeStyle = rect.color;
+                            ctx.lineWidth = 3;
+                            ctx.stroke();
+                        }
+                    });
+                }
+                
+                // 恢复状态
+                ctx.restore();
+                
+                // 绘制视图边界指示器
+                drawViewBoundary();
+            }
+            
+            // 绘制网格
+            function drawGrid() {
+                // 因为应用了平移，我们需要在整个可见区域绘制网格
+                const extendedWidth = canvas.width * 3;
+                const extendedHeight = canvas.height * 3;
+                const startX = -extendedWidth / 2;
+                const startY = -extendedHeight / 2;
+                
+                ctx.strokeStyle = 'rgba(100, 100, 150, 0.2)';
+                ctx.lineWidth = 1;
+                
+                for (let x = startX; x <= startX + extendedWidth; x += 20) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, startY);
+                    ctx.lineTo(x, startY + extendedHeight);
+                    ctx.stroke();
+                }
+                
+                for (let y = startY; y <= startY + extendedHeight; y += 20) {
+                    ctx.beginPath();
+                    ctx.moveTo(startX, y);
+                    ctx.lineTo(startX + extendedWidth, y);
+                    ctx.stroke();
+                }
+            }
+            
+            // 绘制视图边界指示器
+            function drawViewBoundary() {
+                // 绘制半透明的边界框，表示原始canvas范围
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.strokeRect(0, 0, canvas.width, canvas.height);
+                ctx.setLineDash([]);
+                
+                // 在角落添加文本提示
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+                ctx.font = '12px Arial';
+                ctx.fillText('视图边界', 10, 20);
+                
+                // 显示当前视图偏移
+                ctx.fillText(`偏移: (${Math.round(viewOffsetX)}, ${Math.round(viewOffsetY)})`, 10, 40);
+            }
+            
+            // 重置画布
+            function resetCanvas() {
+                rectangles = [];
+                selectedRectIndex = -1;
+                isRecording = false;
+                viewOffsetX = 0;
+                viewOffsetY = 0;
+                $('#t2video_dl4v_reset').linkbutton('disable');
+                drawCanvas();
+                $('#statusBar').text('画布已重置');
+            }
+            
+            // 开始录制轨迹
+            function startRecording() {
+                if (rectangles.length === 0) {
+                    alert("请先绘制至少一个矩形！");
+                    $('#statusBar').text('错误：请先绘制至少一个矩形！');
+                    return;
+                }
+                
+                // 重置所有轨迹
+                rectangles.forEach(rect => rect.trajectory = []);
+                
+                isRecording = true;
+                $('#t2video_dl4v_reset').linkbutton('enable');
+                $('#statusBar').text('正在录制轨迹... 拖动矩形以创建运动路径');
+            }
+            
+            // 停止录制并生成视频
+            function stopRecording() {
+                isRecording = false;
+                $('#t2video_dl4v_reset').linkbutton('enable');
+                
+                // 检查是否有轨迹
+                let hasTrajectory = false;
+                rectangles.forEach(rect => {
+                    if (rect.trajectory.length > 0) hasTrajectory = true;
+                });
+                
+                if (!hasTrajectory) {
+                    alert("没有运动轨迹");
+                    $('#statusBar').text('警告：没有运动轨迹，请先录制轨迹');
+                    return;
+                }
+                
+                $('#statusBar').text('正在生成视频...');
+                
+                // 直接生成视频，使用B图片作为edit_img参数
+                generateTransparentVideo(editImage || null);
+            }
+            
+            // 生成透明背景视频
+            function generateTransparentVideo(edit_img) {
+                const offscreenCanvas = document.createElement('canvas');
+                // 设置offscreenCanvas尺寸与原始canvas一致（视频输出尺寸）
+                offscreenCanvas.width = canvas.width;
+                offscreenCanvas.height = canvas.height;
+                const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+                
+                // 创建媒体流
+                const stream = offscreenCanvas.captureStream(16);
+                const recordedChunks = [];
+                
+                // 配置MediaRecorder
+                const mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'video/webm;codecs=vp9',
+                    videoBitsPerSecond: 2500000
+                });
+                
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) {
+                        recordedChunks.push(e.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const videoUrl = URL.createObjectURL(blob);                
+                    
+                    // 显示预览
+                    const videoPreview = document.getElementById('dl4VideoPreview');
+                    const resultVideo = document.getElementById('resultDrawLine4Video');
+                    const downloadLink = document.getElementById('downloadDL4Video');
+                    
+                    resultVideo.src = videoUrl;
+                    downloadLink.href = videoUrl;
+                    downloadLink.download = 'generated_video_' + Date.now() + '.webm';
+                    
+                    videoPreview.style.display = 'block';
+                    downloadLink.style.display = 'block';
+                    
+                    // 计算轨迹点总数
+                    let totalPoints = 0;
+                    rectangles.forEach(rect => totalPoints += rect.trajectory.length);
+                    
+                    $('#statusBar').text('视频生成完成！可下载或播放预览');
+                    alert('视频生成完成！');
+                };
+                
+                mediaRecorder.start();
+                            
+                let dl4v_duration = $('#t2video_dl4v_duration').slider('getValue');    
+
+                // 动画参数
+                const duration = parseInt(dl4v_duration)*1000; // 动画时长
+                const startTime = Date.now();
+                
+                // 计算每个矩形的速度
+                rectangles.forEach(rect => {
+                    if (rect.trajectory.length > 1) {
+                        // 计算矩形移动的总距离（像素）
+                        let totalDistance = 0;
+                        for (let i = 1; i < rect.trajectory.length; i++) {
+                            const prev = rect.trajectory[i-1];
+                            const curr = rect.trajectory[i];
+                            // 计算中心点之间的欧几里得距离
+                            const dx = (curr.x + curr.width/2) - (prev.x + prev.width/2);
+                            const dy = (curr.y + curr.height/2) - (prev.y + prev.height/2);
+                            totalDistance += Math.sqrt(dx*dx + dy*dy);
+                        }
+                        // 计算像素/毫秒的速度
+                        rect.speed = totalDistance / duration;
+                    } else {
+                        rect.speed = 0; // 没有移动
+                    }
+                });
+                
+                // 动画函数
+                function animate() {
+                    const currentTime = Date.now();
+                    const elapsed = currentTime - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    
+                    // 清除画布并设置白色背景
+                    offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+
+                    // 绘制背景
+                    // 如果存在编辑图片，使用它作为背景
+                    if (edit_img) {
+                        //console.log("使用指定图片作为背景图片a");
+                        // 使用B图片作为背景
+                        offscreenCtx.drawImage(edit_img, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+                    } else {
+                        //console.log("使用指定图片作为背景图片b");
+                        // 否则使用原始背景图片
+                        offscreenCtx.fillStyle = 'white';
+                        offscreenCtx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+                        
+                        if (backgroundImage && backgroundImage.complete && backgroundImage.naturalWidth > 0) {
+                            offscreenCtx.drawImage(
+                                backgroundImage, 
+                                0, 
+                                0, 
+                                offscreenCanvas.width, 
+                                offscreenCanvas.height
+                            );
+                        }
+                    }
+                    
+                    // 绘制所有矩形
+                    rectangles.forEach(rect => {
+                        if (rect.trajectory.length === 0) return;
+                        
+                        // 计算当前矩形应移动的总距离
+                        const distanceTraveled = elapsed * rect.speed;
+                        
+                        // 查找当前位置
+                        let accumulatedDistance = 0;
+                        let currentIndex = 0;
+                        let frame;
+                        
+                        // 对于静止的矩形
+                        if (rect.speed === 0) {
+                            frame = rect.trajectory[0];
+                        } 
+                        // 对于移动的矩形
+                        else {
+                            // 找到当前距离对应的轨迹段
+                            for (let i = 1; i < rect.trajectory.length; i++) {
+                                const prev = rect.trajectory[i-1];
+                                const curr = rect.trajectory[i];
+                                
+                                // 计算两点之间的距离
+                                const dx = (curr.x + curr.width/2) - (prev.x + prev.width/2);
+                                const dy = (curr.y + curr.height/2) - (prev.y + prev.height/2);
+                                const segmentDistance = Math.sqrt(dx*dx + dy*dy);
+                                
+                                // 如果累计距离超过已移动距离，则找到当前段
+                                if (accumulatedDistance + segmentDistance >= distanceTraveled) {
+                                    const segmentProgress = (distanceTraveled - accumulatedDistance) / segmentDistance;
+                                    
+                                    // 线性插值计算当前位置
+                                    frame = {
+                                        x: prev.x + (curr.x - prev.x) * segmentProgress,
+                                        y: prev.y + (curr.y - prev.y) * segmentProgress,
+                                        width: prev.width + (curr.width - prev.width) * segmentProgress,
+                                        height: prev.height + (curr.height - prev.height) * segmentProgress
+                                    };
+                                    currentIndex = i;
+                                    break;
+                                }
+                                
+                                accumulatedDistance += segmentDistance;
+                                
+                                // 如果到达最后一点
+                                if (i === rect.trajectory.length - 1) {
+                                    frame = curr;
+                                }
+                            }
+                        }
+                        
+                        // 绘制矩形（只绘制在canvas内的部分）
+                        if (frame) {
+                            // 检查矩形是否在canvas内（至少部分在）
+                            const isVisible = frame.x < offscreenCanvas.width && 
+                                             frame.x + frame.width > 0 && 
+                                             frame.y < offscreenCanvas.height && 
+                                             frame.y + frame.height > 0;
+                            
+                            if (isVisible) {
+                                // 如果有背景图片，使用背景图片绘制矩形
+                                if (rect.backgroundImage && rect.backgroundImage.complete && rect.backgroundImage.naturalWidth > 0) {
+                                    offscreenCtx.drawImage(
+                                        rect.backgroundImage,
+                                        frame.x,
+                                        frame.y,
+                                        frame.width,
+                                        frame.height
+                                    );
+                                } else {
+                                    // 没有背景图片时使用半透明红色填充
+                                    offscreenCtx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+                                    offscreenCtx.fillRect(frame.x, frame.y, frame.width, frame.height);
+                                }
+                            }
+                        }
+                    });
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        mediaRecorder.stop();
+                    }
+
+                    $('#t2video_dl4v_reset').linkbutton('disable');
+                }
+                
+                animate();
+            }
+            
+            // 初始化应用
+            init();
+        }
+    </script>
+</body>
+</html>
