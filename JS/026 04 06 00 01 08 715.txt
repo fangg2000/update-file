@@ -1,0 +1,45 @@
+### 【模块1：固定风格标签（一字不差保留你的原文）】
+```
+anime, high_budget_anime_movie_style, key_visual, ultra_detailed_background, 4k, 8k, cinematic_lighting, painterly_environment, soft_cel_shading, masterpiece
+imagine a lavish anime movie illustration of [一条狗在小溪边奔跑]，composed like a theatrical key visual where the main subject is rendered with elegant, refined anime lineart and nuanced shading while the [天空], [核心景观], and [中景元素] are painted with dreamy, nostalgic detail;
+```
+
+### 【模块2：主体深度刻画（自动适配主体类型）】
+- 人物：年龄气质→面部轮廓→皮肤纹理→眼睛分层反光→毛发质感动态→穿搭材质褶皱→配饰细节→松弛动作神态→四分之三视图
+- 动物：年龄体型→毛发质感→五官神态→动作动态→配饰（如有）→四分之三视图
+- 物体：材质纹理→磨损痕迹→光影反射→周围互动元素
+
+### 【模块3：环境四层构建（自动适配场景）】
+- 远景：朦胧山峦/建筑/天际线→大气透视效果
+- 中景：核心景观→功能性物体→虚化的零星人物/生物
+- 近景：地面细节→植被→小物件
+- 隐藏细节：水渍/落叶/积雪/磨损痕迹→增加真实感
+
+### 【模块4：通用天空与光景系统（核心改进）】
+| 光景类型 | 自动生成的天空与色彩 |
+|---------|----------------------|
+| 清晨 | 淡粉→鹅黄→浅蓝渐变，薄雾笼罩，朝阳柔和的金色光晕 |
+| 午后 | 浅蓝→天蓝渐变，蓬松白云，阳光透过树叶形成丁达尔效应 |
+| 黄昏 | 橙粉→淡紫→藏蓝渐变，第一颗星星亮起，薄云残留暖色 |
+| 雨夜 | 深灰→靛蓝渐变，云层厚重，路灯在雨幕中形成光晕 |
+| 雪夜 | 墨蓝→银灰渐变，满月清辉，雪花反射冷白色光芒 |
+| 星空 | 深紫→藏青→纯黑渐变，银河清晰可见，繁星点点 |
+
+### 【模块5：通用三色光影系统（保留你的原始逻辑，光色自动适配）】
+```
+Lighting is smooth and cinematic: the sky's ambient light provides a soft overall wash, painting everything in delicate [主色调] tones, no harsh contrasts; a nearby [暖光源] serves as a gentle, warm key, creating mild cel-shaded shadows under natural contours, while the cool [冷色调] light from [环境冷源] fills the opposite side of the figure; the [次要光源] create small, warm highlights on reflective surfaces, while reflections provide faint shimmering light along edges.
+[对应发光元素] drift near [对应位置], glowing faintly in the foreground and background as tiny, drifting points of light; the sound of [环境音] is implied by subtle visual details.
+```
+
+### 【模块6：固定质感描述（一字不差保留你的原文）】
+```
+The anime shading is mature and understated: cel-shaded base tones with smooth gradients, slightly deeper tone in natural shadow areas; highlights painted as simple curved shapes that follow the form, with soft color variation reflecting the ambient palette; material shading emphasizes texture and weight, with broad, soft folds and small ambient occlusion. The painterly environment uses soft brush strokes for sky and natural elements, more defined edges for man-made objects; distant figures and objects blur into atmospheric depth, while the area around the main subject remains detailed and crisp.
+```
+
+### 【模块7：固定构图与通用氛围】
+```
+Composition places the main subject slightly left of center, the line of [自然引导线] leading the viewer's eye from the lower left corner past the figure and out toward the horizon; [自然框架元素] create framing arcs that draw attention back to the focal point; a blurred patch of [前景元素] in the foreground and a [边缘元素] at the extreme frame add depth. Mood: gentle, nostalgic, and quietly immersive, like a scene in a high-budget anime film where time slows down, letting the colors and sounds wrap around you and remind you of the beauty in ordinary moments.
+```
+
+返回中文
+
