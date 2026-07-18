@@ -1,0 +1,336 @@
+本地推理模型推荐
+
+1、模型下载地址
+empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF
+
+2、运行工具下载
+https://github.com/ggml-org/llama.cpp/releases
+
+3、启动脚本
+# linux启动脚本
+#!/bin/bash
+# LingDu AI Qwythos Launcher - RTX 3060 12GB 极速优化最终版
+# 适配版本：llama.cpp b10066 Vulkan / Ubuntu 24.04 x64
+# 优化目标：修复MTP低接受率、提示词预处理卡顿，最大化单路生成速度
+set -euo pipefail
+cd "$(dirname "$0")"
+
+# ========== NVIDIA Vulkan 运行时环境优化 ==========
+export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
+export NVVK_ALLOC_DEDICATED=1
+export VK_LOADER_DEBUG=none
+
+# ========== 自动扫描模型与视觉编码器 ==========
+MODEL=""
+MMPROJ=""
+
+shopt -s nullglob
+model_files=(./models/Qwythos*.gguf)
+mmproj_files=(./models/mmproj*.gguf)
+shopt -u nullglob
+
+for file in "${model_files[@]}"; do
+    [[ ! "$file" =~ mmproj ]] && MODEL="$file"
+done
+for file in "${mmproj_files[@]}"; do
+    MMPROJ="$file"
+done
+
+# ========== 主菜单 ==========
+MENU() {
+    while true; do
+        clear
+        echo ""
+        echo "============================================================"
+        echo "      LingDu AI - Qwythos Launcher (RTX 3060 极速版)"
+        echo "          Claude Mythos 5 Distilled Vision Model"
+        echo "============================================================"
+        echo ""
+        echo "主模型:    ${MODEL:-NOT FOUND}"
+        echo "视觉模块:  ${MMPROJ:-未检测到 (默认纯文本运行)}"
+        echo ""
+        echo "============================================================"
+        echo "RTX 3060 12GB 速度档位"
+        echo "[1] 极速模式   64K上下文  单路独占算力  【推荐首选】"
+        echo "[2] 平衡模式   128K上下文 速度与长度兼顾"
+        echo "[3] 长文本模式 256K上下文 稳定长文档处理"
+        echo "------------------------------------------------------------"
+        echo "OpenAI API: http://127.0.0.1:8888/v1"
+        echo "Web 前端:   http://127.0.0.1:8888"
+        echo "------------------------------------------------------------"
+        echo "[0] Exit"
+        echo "============================================================"
+        echo ""
+        read -p "Select Option: " choice
+
+        case "$choice" in
+            1) CTX=65536;   MODE="SPEED"   ;;
+            2) CTX=131072;  MODE="BALANCE" ;;
+            3) CTX=262144;  MODE="LONG"    ;;
+            0) exit 0 ;;
+            *) continue ;;
+        esac
+
+        launch_server
+    done
+}
+
+# ========== 服务启动核心逻辑 ==========
+launch_server() {
+    clear
+    echo ""
+    echo "============================================================"
+    echo "Starting Qwythos (RTX 3060 Optimized)"
+    echo "Mode: $MODE | Context: $CTX"
+    echo "Model: $MODEL"
+    echo "============================================================"
+    echo ""
+
+    if [[ -z "$MODEL" ]]; then
+        echo "ERROR: 未找到 Qwythos 主模型，请放入 ./models/ 目录"
+        read -p "按回车键返回菜单..."
+        return
+    fi
+
+    # 基础性能参数组（适配b10066版本，无无效参数）
+    BASE_ARGS=(
+        -m "$MODEL"
+        -ngl 999
+        -c "$CTX"
+        -n 8192
+        -fa on
+        --cont-batching
+        --cache-type-k q8_0
+        --cache-type-v q8_0
+        --kv-unified
+        --no-mmap
+        --mlock
+        --parallel 1             # 单路独占全部算力
+        --threads "$(nproc --all)"
+        --cors-origins localhost # 消除CORS安全警告，本地使用无影响
+        --host 127.0.0.1
+        --port 8888
+    )
+
+    # 分档位精细化调参（微批次收窄适配Vulkan调度特性）
+    case "$MODE" in
+        "SPEED")
+            BASE_ARGS+=(--batch-size 2048 --ubatch-size 128)
+            ;;
+        "BALANCE")
+            BASE_ARGS+=(--batch-size 2048 --ubatch-size 64)
+            ;;
+        "LONG")
+            BASE_ARGS+=(--batch-size 1024 --ubatch-size 64)
+            ;;
+    esac
+
+    # MTP 推测解码（收窄草稿长度，优先保证接受率）
+    if [[ "$MODEL" =~ -MTP- ]]; then
+        BASE_ARGS+=(--spec-type draft-mtp --spec-draft-n-max 3)
+        echo "[√] MTP 推测解码已启用，草稿长度=3，目标接受率 40%+"
+    else
+        echo "[!] 非MTP模型，建议更换 MTP 版本获取更高速度"
+    fi
+    echo ""
+
+    # 视觉编码器：默认不加载，需要时手动追加
+    if [[ -n "$MMPROJ" ]]; then
+        read -p "是否加载视觉编码器？(加载后速度会下降) [y/N]: " load_v
+        if [[ "$load_v" =~ ^[Yy]$ ]]; then
+            BASE_ARGS+=(--mmproj "$MMPROJ")
+            echo "[i] 已加载视觉编码器"
+        else
+            echo "[i] 纯文本模式运行，性能最优"
+        fi
+    else
+        echo "[i] 纯文本模式运行，性能最优"
+    fi
+    echo ""
+
+    # 启动 llama-server
+    ./llama-server "${BASE_ARGS[@]}"
+
+    echo ""
+    echo "服务已停止，按回车键返回菜单..."
+    read
+}
+
+# 进入主菜单
+MENU
+
+# win启动脚本
+<#
+.SYNOPSIS
+    LingDu AI Qwythos Launcher (Windows PowerShell 版)
+    RTX 3060 12GB 极速优化 — 适配 llama.cpp b10066 Vulkan
+#>
+
+# 严格模式（遇错即停，变量未定义报错）
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+# 切换至脚本所在目录
+Set-Location -Path $PSScriptRoot
+
+# ========== NVIDIA Vulkan 运行时环境变量（Windows） ==========
+$env:VK_ICD_FILENAMES = "C:\Windows\System32\vulkan\icd.d\nvidia_icd.json"  # 根据实际路径调整
+$env:NVVK_ALLOC_DEDICATED = "1"
+$env:VK_LOADER_DEBUG = "none"
+
+# ========== 自动扫描模型与视觉编码器 ==========
+$Model = $null
+$Mmproj = $null
+
+if (Test-Path -Path ".\models") {
+    $modelFiles = Get-ChildItem -Path ".\models" -Filter "Qwythos*.gguf" -File | Where-Object { $_.Name -notmatch "mmproj" }
+    if ($modelFiles) {
+        $Model = $modelFiles[0].FullName
+    }
+
+    $mmprojFiles = Get-ChildItem -Path ".\models" -Filter "mmproj*.gguf" -File
+    if ($mmprojFiles) {
+        $Mmproj = $mmprojFiles[0].FullName
+    }
+}
+
+# ========== 主菜单 ==========
+function Show-Menu {
+    while ($true) {
+        Clear-Host
+        Write-Host ""
+        Write-Host "============================================================"
+        Write-Host "      LingDu AI - Qwythos Launcher (RTX 3060 极速版)"
+        Write-Host "          Claude Mythos 5 Distilled Vision Model"
+        Write-Host "============================================================"
+        Write-Host ""
+        if ($Model) {
+            Write-Host "主模型:    $Model"
+        } else {
+            Write-Host "主模型:    NOT FOUND"
+        }
+        if ($Mmproj) {
+            Write-Host "视觉模块:  $Mmproj"
+        } else {
+            Write-Host "视觉模块:  未检测到 (默认纯文本运行)"
+        }
+        Write-Host ""
+        Write-Host "============================================================"
+        Write-Host "RTX 3060 12GB 速度档位"
+        Write-Host "[1] 极速模式   64K上下文  单路独占算力  【推荐首选】"
+        Write-Host "[2] 平衡模式   128K上下文 速度与长度兼顾"
+        Write-Host "[3] 长文本模式 256K上下文 稳定长文档处理"
+        Write-Host "------------------------------------------------------------"
+        Write-Host "OpenAI API: http://127.0.0.1:8888/v1"
+        Write-Host "Web 前端:   http://127.0.0.1:8888"
+        Write-Host "------------------------------------------------------------"
+        Write-Host "[0] Exit"
+        Write-Host "============================================================"
+        Write-Host ""
+
+        $choice = Read-Host "Select Option"
+        switch ($choice) {
+            "1" { Launch-Server -Context 65536  -Mode "SPEED"   }
+            "2" { Launch-Server -Context 131072 -Mode "BALANCE" }
+            "3" { Launch-Server -Context 262144 -Mode "LONG"    }
+            "0" { exit 0 }
+            default { continue }
+        }
+    }
+}
+
+# ========== 服务启动核心逻辑 ==========
+function Launch-Server {
+    param(
+        [int]$Context,
+        [string]$Mode
+    )
+
+    Clear-Host
+    Write-Host ""
+    Write-Host "============================================================"
+    Write-Host "Starting Qwythos (RTX 3060 Optimized)"
+    Write-Host "Mode: $Mode | Context: $Context"
+    Write-Host "Model: $Model"
+    Write-Host "============================================================"
+    Write-Host ""
+
+    if (-not $Model) {
+        Write-Host "ERROR: 未找到 Qwythos 主模型，请放入 .\models\ 目录"
+        Read-Host "按回车键返回菜单..."
+        return
+    }
+
+    # 基础参数（适配 Windows 版 llama-server.exe）
+    $BaseArgs = @(
+        "-m", $Model,
+        "-ngl", "999",
+        "-c", "$Context",
+        "-n", "8192",
+        "-fa", "on",
+        "--cont-batching",
+        "--cache-type-k", "q8_0",
+        "--cache-type-v", "q8_0",
+        "--kv-unified",
+        "--no-mmap",
+        "--mlock",               # Windows 下可能无效，但保留无影响
+        "--parallel", "1",
+        "--threads", [System.Environment]::ProcessorCount,
+        "--cors-origins", "localhost",
+        "--host", "127.0.0.1",
+        "--port", "8888"
+    )
+
+    # 按模式调整微批次大小
+    switch ($Mode) {
+        "SPEED"   { $BaseArgs += @("--batch-size", "2048", "--ubatch-size", "128") }
+        "BALANCE" { $BaseArgs += @("--batch-size", "2048", "--ubatch-size", "64")  }
+        "LONG"    { $BaseArgs += @("--batch-size", "1024", "--ubatch-size", "64")  }
+    }
+
+    # MTP 推测解码
+    if ($Model -match "-MTP-") {
+        $BaseArgs += @("--spec-type", "draft-mtp", "--spec-draft-n-max", "3")
+        Write-Host "[√] MTP 推测解码已启用，草稿长度=3，目标接受率 40%+"
+    } else {
+        Write-Host "[!] 非MTP模型，建议更换 MTP 版本获取更高速度"
+    }
+    Write-Host ""
+
+    # 视觉编码器：按需加载（默认不加载）
+    if ($Mmproj) {
+        $loadVision = Read-Host "是否加载视觉编码器？(加载后速度会下降) [y/N]"
+        if ($loadVision -match "^[Yy]") {
+            $BaseArgs += @("--mmproj", $Mmproj)
+            Write-Host "[i] 已加载视觉编码器"
+        } else {
+            Write-Host "[i] 纯文本模式运行，性能最优"
+        }
+    } else {
+        Write-Host "[i] 纯文本模式运行，性能最优"
+    }
+    Write-Host ""
+
+    # 检测 llama-server.exe 位置（优先当前目录，其次 .\build\bin\Release\）
+    $serverPath = ".\llama-server.exe"
+    if (-not (Test-Path $serverPath)) {
+        $serverPath = ".\build\bin\Release\llama-server.exe"
+    }
+    if (-not (Test-Path $serverPath)) {
+        Write-Host "ERROR: 找不到 llama-server.exe，请将其放在脚本同目录或 .\build\bin\Release\"
+        Read-Host "按回车键返回菜单..."
+        return
+    }
+
+    Write-Host "启动命令: $serverPath $($BaseArgs -join ' ')"
+    # 启动服务器（前台运行，Ctrl+C 停止后返回菜单）
+    & $serverPath $BaseArgs
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "服务器异常退出，代码: $LASTEXITCODE"
+    }
+    Write-Host ""
+    Read-Host "服务已停止，按回车键返回菜单..."
+}
+
+# 进入主菜单
+Show-Menu
