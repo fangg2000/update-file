@@ -1,0 +1,161 @@
+# MiniMax H3 全参考模式 (Ref2VA) 提示词生成模板
+
+## 模板用途
+基于用户提供的参考素材（图片/视频/音频）、剧情描述与生成需求，自动生成符合 MiniMax H3 官方格式规范的全参考模式提示词。该模板直接输出可供模型推理的标准化提示词结构，涵盖主体定义、摘要、保留分析、详细描述、音景与音乐六大字段。
+
+## 核心原则
+
+### 1. 字段顺序绝对固定
+全参考模式必须严格按照以下 6 个字段的顺序输出，不可调换、合并、翻译或省略：
+1. `subject_definitions`
+2. `summary`
+3. `retention_analysis`
+4. `detailed_description`
+5. `overall_soundscape`
+6. `non_diegetic_music`
+
+### 2. 标签一致性原则
+在 `subject_definitions` 中定义的所有标签（如 `<Subject 1>`、`<Picture 1>`），必须在后续所有字段中使用完全相同的名称，不可更改、翻译或缩写。
+
+### 3. 语言规则
+- 六个字段的**正文描述必须使用英文**。
+- **角色对话、歌词、画面中的文字**可以保留其原始语言（如中文）。
+
+### 4. 参考素材约束
+- 最多可使用 **9 张图片**、**3 段视频**（总时长 ≤ 15 秒）、**3 段音频**。
+- 总文件数不超过 **12 个**。
+
+## 强制要求
+
+### 1. 完整主体定义（subject_definitions）
+必须明确定义每个参考标签的含义，格式为 `[标签] is [角色/素材描述], defined from [来源标签]`。
+
+**支持标签类型**：
+- `<Subject N>`：可复用主体（人物、动物、物体）
+- `<Picture N>`：参考图片
+- `<Video N>`：参考视频
+- `<Audio N>`：参考音频
+
+### 2. 摘要必须包含任务类型前缀（summary）
+摘要必须以一个或多个任务类型前缀开头，用 `+` 连接：
+- `keyframe completion`：关键帧补全
+- `reference generation`：参考生成
+- `video editing`：视频编辑
+- `video continuation`：视频续写
+- `audio reuse`：音频复用
+- `audio reference`：音频参考
+
+### 3. 保留分析使用标准标记（retention_analysis）
+每个标签必须单独一行，并使用以下保留标记之一：
+- `fully_preserved`：完全保留
+- `partially_preserved`：部分保留
+- `attribute_transfer`：迁移属性（风格、颜色等）
+- `weak_reference`：弱参考（仅作为灵感或大致指导）
+
+### 4. 详细描述遵循时间码格式（detailed_description）
+- 先以 1-2 句英文描述**整体风格**。
+- 然后使用 `[Xs-Ys]` 格式按时间分段描述。
+- 总时长必须在 **4-15 秒**之间。
+- 描述必须包含：机位/景别、主体动作、环境变化、镜头运动。
+
+### 5. 音景与音乐分离（overall_soundscape / non_diegetic_music）
+- `overall_soundscape`：环境音与物理动作音，1-4 句英文。
+- `non_diegetic_music`：背景音乐，1-3 句英文；不需要时写 `N/A`。
+
+### 6. 禁止元语言
+禁止出现以下内容：
+- `承接上一镜`、`延续视角`、`此处切入` 等衔接说明
+- `用于体现`、`作用是`、`此处呈现` 等功能注释
+- 任何导演评论、创作意图解释
+
+### 7. 动态优先于静态
+描述必须聚焦于**动作、运动、变化**，而非静态画面堆砌。
+
+## 标准输入格式（此为提示内容）
+
+- **参考素材清单**：[
+  <Picture 1> — 圆形逃生船的参考图（通体焦黑，正在坠落）；
+  <Picture 2> — 场景环境参考图（高空，雪山，云层之上）
+]
+- **剧情概述**：[高空俯瞰无垠云海，右上角远处出现一黑点，出现近景时看到是一圆形逃生船，一路黑烟，往镜头左下角坠入云层。]
+- **总时长**：[7秒]
+- **核心主体描述**：[
+圆形逃生船：那是一艘圆形逃生船，通体焦黑，外壳上布满了高温灼烧后的龟裂纹路，像一颗被烧裂的铁球，像一颗被烧裂的铁球的圆形逃生船
+]
+- **是否添加背景音乐**：[否]
+
+## 标准输出格式（严格按照如下格式输出，无需解释说明、总结或注解）
+
+```text
+subject_definitions:
+[逐个定义所有参考标签，每行一个]
+
+summary:
+[任务类型前缀 + 1-2句英文总结]
+
+retention_analysis:
+[逐个分析每个标签的保留方式，每行一个，使用标准标记]
+
+detailed_description:
+[1-2句整体风格描述]
+[Xs-Ys] [详细画面描述，包含机位/景别/动作/环境]
+[Xs-Ys] [详细画面描述]
+[...]
+
+overall_soundscape:
+[1-4句英文环境音与动作音描述]
+
+non_diegetic_music:
+[1-3句英文背景音乐描述，不需要则写 N/A]
+```
+
+## 输出示例（基于蚂蚁剧情）
+
+```text
+subject_definitions:
+<Subject 1> is the protagonist ant "Diandian", defined from <Picture 1>, with a sleek black carapace and arrogant posture.
+<Subject 2> is the red ant captain, defined from <Picture 2>, wounded and being supported by subordinates.
+<Subject 3> is the group of red ant soldiers, defined from <Picture 3>, panicked and retreating.
+<Picture 1> is the first-frame reference for the opening shot, showing Diandian standing alone on a mound.
+<Picture 2> is the composition anchor for establishing spatial relationship between Diandian and the red ant group.
+<Picture 3> is the reference for red ant subjects' color, size, and movement style.
+
+summary:
+reference generation + keyframe completion. The target video depicts a tense standoff where the black ant Diandian intimidates a group of red ants with a dismissive threat, causing them to flee in panic towards the high ground—the same direction Diandian originally came from.
+
+retention_analysis:
+<Subject 1>: fully_preserved — maintain Diandian's black carapace color, arrogant posture, deliberate movements, and distinctive smoke-exhaling mannerism throughout all shots.
+<Subject 2>: partially_preserved — preserve the red ant captain's wounded state and red coloration; its role is to be carried away by subordinates.
+<Subject 3>: partially_preserved — preserve the red ant soldiers' red coloration and panicked movement style; their role is to flee en masse.
+<Picture 1>: fully_preserved — the opening frame must match the composition and subject positioning of the reference image.
+<Picture 2>: weak_reference — use the spatial relationship between the two ant groups as a general guide for the standoff composition.
+<Picture 3>: attribute_transfer — transfer the red ants' color palette and scale from the reference to all red ant subjects in the video.
+
+detailed_description:
+A tense, Western-standoff-style scene between two ant colonies, captured in cinematic medium and close-up shots.
+[0s-2s] Medium shot of <Subject 1>, Diandian, standing alone atop a small dusty mound, silhouetted against a bright sky. He takes a long, deliberate pause after a prior commotion, a thin wisp of smoke lazily curling from his mandibles as he waits in oppressive silence. <Subject 2> and <Subject 3> are visible in the lower foreground, cowering and disoriented.
+[2s-4s] Close-up on <Subject 1> as he slowly, contemptuously expels a perfect drifting smoke ring. He sneers with undisguised disdain and speaks in a slow, gritty tone: "我数到三，如果你到时候还没从我视线里消失——" He deliberately trails off, leaving the threat unfinished and hanging in the air.
+[4s-6s] <Subject 3>, the surrounding red ants, immediately break into a panicked frenzy. Two of them frantically hoist <Subject 2>, the wounded captain, onto their shoulders and bolt. The group scrambles desperately, legs scratching against the dirt, towards a steep embankment on the higher ground.
+[6s-8s] <Subject 3> scurries over the crest of the embankment at full speed, <Subject 2> still being carried along. In the blink of an eye, their tiny silhouettes vanish completely over the horizon, disappearing exactly into the same path that <Subject 1> originally came from. <Subject 1> remains motionless, watching them flee.
+
+overall_soundscape:
+The whisper of dry wind across sun-baked soil, a soft hissing exhalation of smoke, followed by frantic rustling and scratching of multiple tiny legs scrambling against dirt and pebbles, gradually fading into a distant, echoing void.
+
+non_diegetic_music:
+N/A
+```
+
+## 执行检查清单（输出前自检）
+
+1. □ 六个字段是否按 `subject_definitions` → `summary` → `retention_analysis` → `detailed_description` → `overall_soundscape` → `non_diegetic_music` 的绝对顺序排列？
+2. □ `subject_definitions` 中定义的所有标签，在后续字段中是否保持完全一致？
+3. □ `summary` 是否包含任务类型前缀（如 `reference generation`）？
+4. □ `retention_analysis` 中每个标签是否单独成行，并使用了标准保留标记（`fully_preserved` / `partially_preserved` / `attribute_transfer` / `weak_reference`）？
+5. □ `detailed_description` 的总时长是否在 4-15 秒之间？
+6. □ 时间码是否使用了 `[Xs-Ys]` 格式？
+7. □ 画面描述是否为纯视觉语言，可直接转化为画面，无元语言表述？
+8. □ `overall_soundscape` 是否有至少 1-4 句环境音描述？
+9. □ `non_diegetic_music` 是否明确填写了背景音乐或 `N/A`？
+10. □ 所有描述聚焦于动态过程，无静态画面堆砌？
+11. □ 六个字段的正文是否全部使用英文（对话/歌词/屏幕文字除外）？
+
