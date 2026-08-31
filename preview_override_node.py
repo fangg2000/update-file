@@ -4,6 +4,7 @@ import logging
 import queue
 import threading
 import time
+import os
 
 import numpy as np
 import torch
@@ -357,11 +358,12 @@ def _normalize_packed_x0(x0, latent_shapes, num_keyframes):
         x0 = x0[:, :, :-num_keyframes]
     return x0
 
-
 class _PreviewOverrideWrapper:
     def __init__(self, max_resolution, node_id, jpeg_quality, suppress_default, 
                  preview_frames=1, preview_fps=12, vae=None, tiny_vae="none",
-                 save_frame_mode="Original (Default)"):
+                 save_frame_mode="Original (Default)",
+                 save_step=0,          # 新增：要保存的步数（1‑based，2~10 有效，0 禁用）
+                 save_path=""):        # 新增：保存路径，空则用默认输出目录
         self.max_resolution = max_resolution
         self.node_id = str(node_id) if node_id is not None else None
         self.jpeg_quality = jpeg_quality
@@ -372,6 +374,14 @@ class _PreviewOverrideWrapper:
         self.tiny_vae = tiny_vae
         self.frames = []
         self.save_frame_mode = save_frame_mode
+        self.save_step = save_step
+        self.save_path = save_path
+
+        # 若未指定保存路径，则使用 ComfyUI 默认输出目录
+        if not self.save_path:
+            self.save_path = folder_paths.get_output_directory()
+        # 确保目录存在
+        os.makedirs(self.save_path, exist_ok=True)
 
     def __call__(self, executor, noise, latent_image, sampler, sigmas, denoise_mask, callback, disable_pbar, seed, latent_shapes):
         guider = executor.class_obj
@@ -562,6 +572,55 @@ class _PreviewOverrideWrapper:
                     if pil_first.mode != "RGB":
                         pil_first = pil_first.convert("RGB")
                         pil_frames[0] = pil_first
+
+                    # ========== 新增：保存指定步骤的预览图像 ==========
+                    if self.save_step > 0 and step == (self.save_step - 1):
+                        try:
+                            timestamp = time.strftime("%Y%m%d_%H%M%S")
+                            if len(pil_frames) > 1:
+                                # 尝试编码为视频
+                                video_b64 = None
+                                ext = ""
+                                if _NVENC_AVAILABLE:
+                                    try:
+                                        b64, w_, h_ = _encode_mp4_nvenc(pil_frames, anim_fps, max_res)
+                                        if b64:
+                                            video_b64 = b64
+                                            ext = ".mp4"
+                                    except Exception as e:
+                                        logging.warning(f"NVENC video encoding failed, trying WebP: {e}")
+                                if not video_b64:
+                                    try:
+                                        b64, w_, h_ = _encode_animated_webp(pil_frames, anim_fps, quality, max_res)
+                                        if b64:
+                                            video_b64 = b64
+                                            ext = ".webp"
+                                    except Exception as e:
+                                        logging.warning(f"WebP video encoding failed: {e}")
+                                if video_b64:
+                                    video_bytes = base64.b64decode(video_b64)
+                                    fname = f"preview_{self.node_id or 'nonode'}_step{step+1}_{timestamp}{ext}"
+                                    full_path = os.path.join(self.save_path, fname)
+                                    with open(full_path, "wb") as f:
+                                        f.write(video_bytes)
+                                    logging.info(f"[KJ PreviewOverride] Saved step {step+1} video to {full_path}")
+                                else:
+                                    # 回退：保存所有帧为独立 JPEG
+                                    for i, frame in enumerate(pil_frames):
+                                        if frame.mode != "RGB":
+                                            frame = frame.convert("RGB")
+                                        fname = f"preview_{self.node_id or 'nonode'}_step{step+1}_frame{i}_{timestamp}.jpg"
+                                        frame.save(os.path.join(self.save_path, fname), "JPEG", quality=self.jpeg_quality)
+                                    logging.warning("Video encoding failed, saved frames as JPEG sequence instead.")
+                            else:
+                                # 单帧保存为 JPEG
+                                fname = f"preview_{self.node_id or 'nonode'}_step{step+1}_{timestamp}.jpg"
+                                full_path = os.path.join(self.save_path, fname)
+                                pil_first.save(full_path, "JPEG", quality=self.jpeg_quality)
+                                logging.info(f"[KJ PreviewOverride] Saved step {step+1} preview to {full_path}")
+                        except Exception as e:
+                            logging.warning(f"[KJ PreviewOverride] Failed to save preview for step {step+1}: {e}")
+                    # ========== 保存逻辑结束 ==========
 
                     # ========== 核心修改：帧保存逻辑 ==========
                     if self.save_frame_mode == "Original (Default)":
@@ -755,14 +814,27 @@ class ModelPreviewOverrideKJ(io.ComfyNode):
                     tooltip="Tiny VAE decoder from models/vae_approx for true-RGB previews. "
                             "Overrides Latent2RGB and the 'vae' input.",
                 ),
-                # ========== 修改：英文选项 + 修正语义 ==========
                 io.Combo.Input(
                     "save_frame_mode",
                     options=["Original (Default)", "Last Frame Per Step", "All Frames", "Half Frames"],
                     default="Original (Default)",
                     tooltip="Controls frames saved to the list. Original = default behavior (1st frame per step). All/Half = only capture the last sampling step.",
                 ),
-                # ========== 修改结束 ==========
+                # ========== 新增输入 ==========
+                io.Int.Input(
+                    "save_step",
+                    default=0,
+                    min=0,
+                    max=10,
+                    step=1,
+                    tooltip="Specify a sampling step (2-10) to save its preview image to disk. 0 = disabled.",
+                ),
+                io.String.Input(
+                    "save_path",
+                    default="output/temp",
+                    tooltip="Directory to save the preview image. Leave empty to use ComfyUI's default output folder.",
+                ),
+                # ========== 新增结束 ==========
             ],
             outputs=[io.Model.Output(tooltip="Model with preview override attached.")],
             hidden=[io.Hidden.unique_id],
@@ -772,7 +844,8 @@ class ModelPreviewOverrideKJ(io.ComfyNode):
     @classmethod
     def execute(cls, model, max_resolution, jpeg_quality, suppress_default_preview,
                 preview_frames, preview_fps, vae=None, tiny_vae="none",
-                save_frame_mode="Original (Default)") -> io.NodeOutput:
+                save_frame_mode="Original (Default)",
+                save_step=0, save_path="") -> io.NodeOutput:
         m = model.clone()
         m.add_wrapper_with_key(
             comfy.patcher_extension.WrappersMP.OUTER_SAMPLE,
@@ -781,6 +854,8 @@ class ModelPreviewOverrideKJ(io.ComfyNode):
                 max_resolution, cls.hidden.unique_id, jpeg_quality, suppress_default_preview,
                 preview_frames, preview_fps, vae, tiny_vae,
                 save_frame_mode,
+                save_step=save_step,
+                save_path=save_path,
             ),
         )
         return io.NodeOutput(m)
