@@ -1,7 +1,9 @@
-# MiniMax H3 全参考模式 (Ref2VA) 提示词生成模板
+# MiniMax H3 全参考模式（Ref2VA）提示词生成模板 V2
 
 ## 模板用途
-基于用户提供的参考素材（图片/视频/音频）、剧情描述与生成需求，自动生成符合 MiniMax H3 官方格式规范的全参考模式提示词。该模板直接输出可供模型推理的标准化提示词结构，涵盖主体定义、摘要、保留分析、详细描述、音景与音乐六大字段。
+基于用户提供的参考素材（图片/视频/音频）、剧情描述、可选的上一个镜头画面描述与生成需求，自动生成符合 MiniMax H3 官方格式规范的全参考模式提示词。本模板直接输出可供模型推理的标准化提示词结构，涵盖主体定义、摘要、保留分析、详细描述、音景与音乐六大字段，并原生支持**内心独白、音色参考、结构参考、首尾帧约束、镜头连贯性**等高级创作技巧，同时提供**关键词自动识别**能力，减少手动声明负担。
+
+---
 
 ## 核心原则
 
@@ -15,15 +17,19 @@
 6. `non_diegetic_music`
 
 ### 2. 标签一致性原则
-在 `subject_definitions` 中定义的所有标签（如 `<Subject 1>`、`<Picture 1>`），必须在后续所有字段中使用完全相同的名称，不可更改、翻译或缩写。
+在 `subject_definitions` 中定义的所有标签（如 `<Subject 1>`、`<Picture 1>`、`<Audio 1>`、`<Video 1>`），必须在后续所有字段中使用完全相同的名称，不可更改、翻译或缩写。若使用了“上一个镜头画面描述”，其中出现的标签也必须与当前定义完全一致。
 
-### 3. 语言规则
-- 六个字段的**正文描述必须使用英文**。
-- **角色对话、歌词、画面中的文字**可以保留其原始语言（如中文）。
-
-### 4. 参考素材约束
-- 最多可使用 **9 张图片**、**3 段视频**（总时长 ≤ 15 秒）、**3 段音频**。
+### 3. 参考素材约束
+- 最多使用 **9 张图片**、**3 段视频**（总时长 ≤ 15 秒）、**3 段音频**。
 - 总文件数不超过 **12 个**。
+
+### 4. 语言规则
+- 六个字段的**正文描述使用中文**。
+- 其中，**角色对话、歌词、画面中的文字**保留原文，六个字段和<标签 N>使用英文。
+- 台词写在 `<d>[语言] ...</d>` 中。
+
+
+---
 
 ## 强制要求
 
@@ -31,10 +37,22 @@
 必须明确定义每个参考标签的含义，格式为 `[标签] is [角色/素材描述], defined from [来源标签]`。
 
 **支持标签类型**：
-- `<Subject N>`：可复用主体（人物、动物、物体）
-- `<Picture N>`：参考图片
-- `<Video N>`：参考视频
-- `<Audio N>`：参考音频
+- `<Subject N>`：可复用主体（人物、动物、物体、场景、服装、风格、动作等）
+- `<Picture N>`：参考图片（可作为首帧、尾帧、关键帧、构图锚点或故事板）
+- `<Video N>`：参考视频（可作为编辑来源、续写起点、剪辑节奏、运镜或时间结构参考）
+- `<Audio N>`：参考音频（可作为完整音频复制、音色参考、音乐风格参考、对话/歌词参考等）
+
+**音色参考绑定规则**：
+- 若音色参考用于具体角色：`<Audio 1> is the voice-timbre reference for <Subject 1> (S1), defined from the provided audio file.`
+- 若用于旁白/内心独白，但发声者不是画面中的具体人物：使用稳定声音描述后加 `(Sx)`：
+  `<Audio 1> is the voice-timbre reference for the internal monologue narrator (S1), a low, slightly hoarse male voice.`
+- `(Sx)` 的编号来自目标视频中实际发声事件的顺序，不单独重新编号。
+
+**结构参考绑定规则**：
+- 若 `<Video N>` 仅提供剪辑节奏、运镜或时间结构，不提供具体画面内容，应明确写出：`<Video 1> is the structural reference for cut pacing and camera movement, defined from the provided video.`
+
+**首尾帧约束绑定规则**：
+- 若 `<Picture N>` 作为某镜头的首帧、尾帧或关键帧，应明确写出：`<Picture 2> is the first frame of [Shot 1], defined from the provided image.`
 
 ### 2. 摘要必须包含任务类型前缀（summary）
 摘要必须以一个或多个任务类型前缀开头，用 `+` 连接：
@@ -45,48 +63,119 @@
 - `audio reuse`：音频复用
 - `audio reference`：音频参考
 
+如果使用了音色参考，必须包含 `audio reference`；如果使用了首尾帧约束，必须包含 `keyframe completion`。
+
 ### 3. 保留分析使用标准标记（retention_analysis）
-每个标签必须单独一行，并使用以下保留标记之一：
+每个标签必须单独成行，使用以下保留标记之一：
 - `fully_preserved`：完全保留
 - `partially_preserved`：部分保留
-- `attribute_transfer`：迁移属性（风格、颜色等）
-- `weak_reference`：弱参考（仅作为灵感或大致指导）
+- `attribute_transfer`：迁移属性（风格、颜色、动作等转移到其他主体）
+- `weak_reference`：弱参考（仅作为灵感或大致指导，如仅参考剪辑节奏、氛围）
+
+**音色参考标记**：使用 `reference`：
+`<Audio 1>: reference — the target internal monologue follows <Audio 1>'s voice timbre and measured delivery without copying the original signal.`
+
+**结构参考标记**：使用 `weak_reference`，并说明只保留节奏/运镜特征：
+`<Video 1>: weak_reference — only the cut pacing and camera movement tendency are retained; the specific visual content is not reused.`
+
+**首尾帧约束标记**：使用 `fully_preserved`，并写明对应关系：
+`<Picture 2>: fully_preserved — the opening frame must match the composition and subject positioning of the reference image.`
 
 ### 4. 详细描述遵循时间码格式（detailed_description）
-- 先以 1-2 句英文描述**整体风格**。
+- 先以 1-2 句描述**整体风格**。
 - 然后使用 `[Xs-Ys]` 格式按时间分段描述。
 - 总时长必须在 **4-15 秒**之间。
 - 描述必须包含：机位/景别、主体动作、环境变化、镜头运动。
+- 禁止元语言（如“承接上一镜”“此处切入”“用于体现”等）。
+- **动态优先于静态**：聚焦动作、运动、变化，而非静态画面堆砌。
+
+**内心独白 / 旁白描述格式**：
+- 明确角色声音以'(Sx) says an off-screen voiceover:'  进入。
+- 绑定说话人 ID `(Sx)`。
+- 台词写在 `<d>` 中，保留原始语言。
+
+**镜头连贯性描述格式（若提供上一个镜头画面描述）**：
+- 当前 `detailed_description` 的 `[0s-...]` 开头，必须以上一镜头结尾时的**主体状态**为起点，保持物理连续。
+- 主体状态包括但不限于：位置、运动方向、速度、姿态、伴随物（烟、火、碎片、尾迹等）、环境光影、天气条件。
+- 若上一镜头结尾主体处于运动状态，当前开头不得无理由静止、转向或消失；若上一镜头结尾主体被遮挡或消失，当前开头应体现该状态，不得直接重新清晰出现。
+- 运镜变化必须有环境或主体事件作为切换依据（如云团吞没、亮度骤变、烟雾弥漫、声音中断等），不得凭空跳变。
+- 光影与环境必须与上一镜头结尾一致，或按自然规律渐进变化。
+- **连续性只能通过具体视觉状态、物理轨迹、运镜动作、光影变化来表现，禁止使用“承接上一镜”“延续视角”“从前一个镜头继续”等元语言表述。**
+
+**普通对话强制格式**：
+- 当角色开口说话时，必须使用明确的说话动词，如 says / speaks / asks / shouts 等；
+- 必须描述发声部位的动作，例如蚂蚁可用 mandibles move / mouth opens / jaws part 等；
+- 句式示例：<Subject N> (Sx) sneers and says, <d>[语言] ...</d>
+- 禁止只用“gives a threat”“delivers a line”“voice follows”等模糊表达代替说话。
+
+**时间物理合理性（第一优先级）**
+- 单镜头内动作数量、运动节奏必须能在对应秒数内物理完成，不得超时堆叠动作。
+- 时长不足时，优先裁剪次要过渡动作（如多余张望、无意义停顿、非核心的腿部调整），只保留剧情原文要求的核心动作与反应。
+- 时长充足时，应完整呈现原文所有描述动作，但全程严禁新增任何与剧情无关的独立动作。
+- 时间物理合理性优先于动作完整度与镜头表现力；当动作数量、镜头运动与指定时长冲突时，以时间物理合理性为准。
+- 镜头运动与主体动作的时间分配应同步匹配，不得因运镜占时而压缩或加快主体动作至不合理速度。
 
 ### 5. 音景与音乐分离（overall_soundscape / non_diegetic_music）
 - `overall_soundscape`：环境音与物理动作音，1-4 句英文。
 - `non_diegetic_music`：背景音乐，1-3 句英文；不需要时写 `N/A`。
+- 若复制参考音频的完整音轨，在对应部分标明 `fully_copy`；若仅参考风格或音色，标注 `reference`。
 
 ### 6. 禁止元语言
 禁止出现以下内容：
-- `承接上一镜`、`延续视角`、`此处切入` 等衔接说明
-- `用于体现`、`作用是`、`此处呈现` 等功能注释
-- 任何导演评论、创作意图解释
+- 衔接说明（“承接上一镜”“延续视角”“此处切入”）
+- 功能注释（“用于体现”“作用是”“此处呈现”）
+- 导演评论、创作意图解释
 
-### 7. 动态优先于静态
-描述必须聚焦于**动作、运动、变化**，而非静态画面堆砌。
+---
 
-## 标准输入格式（此为提示内容）
+## 自动识别规则（可选增强）
 
-- **参考素材清单**：[
-  <Picture 1> — 圆形逃生船的参考图（通体焦黑，正在坠落）；
-  <Picture 2> — 场景环境参考图（高空，雪山，云层之上）
-]
-- **剧情概述**：[高空俯瞰无垠云海，右上角远处出现一黑点，出现近景时看到是一圆形逃生船，一路黑烟，往镜头左下角坠入云层。]
-- **总时长**：[7秒]
-- **核心主体描述**：[
-圆形逃生船：那是一艘圆形逃生船，通体焦黑，外壳上布满了高温灼烧后的龟裂纹路，像一颗被烧裂的铁球，像一颗被烧裂的铁球的圆形逃生船
-]
+当用户输入的「剧情概述」「核心主体描述」或「高级选项」中出现以下任一关键词时，生成器应自动启用相应的特殊描述格式，无需用户在高级选项中重复声明。
+
+### 1. 内心独白 / 心理活动
+**触发关键词**：心想、心里想、默念、内心独白
+
+**触发后必须执行**：
+- 在 `subject_definitions` 中，若音色参考存在，将其绑定到对应主体或叙述者，如 `<Audio 1> is the voice-timbre reference for the internal monologue narrator (S1), ...`；若无音色参考，则直接使用稳定声音描述加 `(Sx)`。
+- 在 `summary` 中，若涉及音色参考，任务类型前缀必须包含 `audio reference`。
+- 在 `retention_analysis` 中，对应 `<Audio N>` 标记为 `reference`。
+- 在 `detailed_description` 中，明确角色独白声音以 `(Sx) says an off-screen voiceover:` 进入，绑定 `(Sx)`，台词放入 `<d>` 中。
+- 不得将内心独白写成角色张嘴说话或对口型。
+
+---
+
+## 标准输入格式
+
+- **参考素材清单**：[<Picture 1> — 场景环境参考图（澄澈的蓝天点缀着白云，翠绿的草地斜坡上，小晨正和一头野猪一同朝着山坡上方奔跑，画面左侧有一棵繁茂高大的阔叶绿树，远处可见朦胧的山峦与成片的绿植，整体是清新治愈的日式动漫户外场景。），用作视频首帧；
+<Picture 2> — 小晨的参考图；
+<Picture 3> — 短刀的参考图；]
+- **剧情概述**：[小晨慌不择路地继续往前方那棵大树的方向狂奔，而小野猪就在他身后一米处紧追不舍，鼻孔喷着粗气，它的低吼一声接一声的传来。小晨一边狂奔一边回头望一眼，小野猪眼看就要追到屁股后面了，大树就在眼前，他来不及多想把右手的短刀一丢，然后他“啊”的一声直接猛地一跳四肢稳稳扒在大树上（离地面半米左右），紧追在后面的小野猪来不及停止一头跟着撞在大树上，大树的叶子都跟着晃了晃。]
+- **总时长**：[8秒]
+- **核心主体描述**：[小晨: 十四五岁，身形偏瘦但站得笔直。黑色短发，脸还带着点少年气，下颌线条干净，一双眼睛不大，却黑亮有神，看人时透着股倔劲儿。，一件洗得发白的灰色粗布上衣，袖口随意挽到小臂，露出细瘦而结实的胳膊。腰间系着一条旧皮带，左侧挂着一只磨得发亮的小皮袋，脚上是一双沾着草屑的旧布鞋。
+短刀: 短刀，短刀]
 - **是否添加背景音乐**：[否]
+
+- **上一个镜头画面描述（可选）**：[
+一段日式动画风格的野外追逐场景，色彩清新明快，左侧是溪水，草地与水珠的质感细腻，动作张力十足，镜头以贴地低角度与手持跟拍强化奔跑的慌乱与冲击力。
+[0s-1.5s] 贴地低角度镜头缓慢向前推进：慢动作中，<Subject 3> 从半空坠落，重重砸在 <Subject 1> 身后约一米处的草地上，左侧是溪水，草叶、泥点与它鬃毛上甩落的水珠向四周炸开，它鼻孔喷出两股粗气，接着怒吼一声；<Subject 1> 双手向后撑地跌坐在草地上，右手仍死死攥着 <Subject 2>，脚下右侧躺着晕死过去的灰兔子，他瞪着近在咫尺的 <Subject 3>，泪水夺眶而出，草叶在他身下被压得倒伏。
+[1.5s-3.5s] 中景手持镜头轻微晃动：<Subject 3> 落地后前蹄在草地上打滑刨土，甩了甩脑袋、鼻孔喷出粗气，重新压低前身准备再次前冲；<Subject 1> 吓得手脚并用地向后蹬蹭，连滚带爬地撑起身，草屑沾满裤腿，他踉跄着转身拔腿就跑，两行泪水在脸颊上划出亮痕。
+[3.5s-5.5s] 侧面横向跟拍镜头与 <Subject 1> 同速移动：他双臂疯狂摆动，右手仍攥着 <Subject 2>，旧布鞋踏得草屑纷飞；他猛地扭头向后看，嘴巴大张，带着哭腔大喊：<d>[中文] 你不要过来啊——</d> 声音音色遵循 <Audio 1>；他身后，<Subject 3> 一边低吼一边四蹄翻飞地追着，鼻孔喷出粗气，湿鬃毛甩出水珠，蹄声急促。
+[5.5s-7s] 镜头切换为后方低角度跟拍，随 <Subject 1> 的奔跑上下颠簸：背景 <Subject 1> 奔跑的正前方很远的地方有颗大树，他沿草地对着那颗大树向前狂奔，粗布上衣下摆被风掀起，眼泪不断甩落，抽泣混着急促的喘气；<Subject 3> 在他身后一米左右紧追不舍，四蹄踏地的闷响越来越密，旁边的草叶被风刮得剧烈摇晃，画面在奔跑的动势中结束。
+
+]
+
+- **高级选项（可选）**：
+  - 内心独白：无
+  - 音色参考：无
+  - 结构参考：无
+  - 首尾帧约束：无
+
+--- 以上为完整输入，请直接生成，不要反问或确认 ---
+---
 
 ## 标准输出格式（严格按照如下格式输出，无需解释说明、总结或注解）
 
-```text
+```
 subject_definitions:
 [逐个定义所有参考标签，每行一个]
 
@@ -103,59 +192,108 @@ detailed_description:
 [...]
 
 overall_soundscape:
-[1-4句英文环境音与动作音描述]
+[1-4句环境音与动作音描述]
 
 non_diegetic_music:
-[1-3句英文背景音乐描述，不需要则写 N/A]
+[1-3句背景音乐描述，不需要则写 N/A]
 ```
 
-## 输出示例（基于蚂蚁剧情）
+---
 
-```text
+## 输出示例
+
+```
 subject_definitions:
-<Subject 1> is the protagonist ant "Diandian", defined from <Picture 1>, with a sleek black carapace and arrogant posture.
-<Subject 2> is the red ant captain, defined from <Picture 2>, wounded and being supported by subordinates.
-<Subject 3> is the group of red ant soldiers, defined from <Picture 3>, panicked and retreating.
-<Picture 1> is the first-frame reference for the opening shot, showing Diandian standing alone on a mound.
-<Picture 2> is the composition anchor for establishing spatial relationship between Diandian and the red ant group.
-<Picture 3> is the reference for red ant subjects' color, size, and movement style.
+<Subject 1> 是主角蚂蚁“点点”，定义自 <Picture 1>，拥有光滑的黑色甲壳和傲慢的姿态。
+<Subject 2> 是红蚁队长，定义自 <Picture 2>，受伤并被部下搀扶。
+<Subject 3> 是一群红蚁士兵，定义自 <Picture 3>，惊慌撤退。
+<Picture 1> 是开场镜头首帧参考，展示点点独自站在土丘上。
+<Picture 2> 是构图锚点，用于确定点点与红蚁群的空间关系。
+<Picture 3> 是红蚁主体颜色、体型和运动风格的参考。
+<Audio 1> 是 <Subject 1>（S1）的音色参考，缓慢、沙哑、带有轻蔑意味，来自提供的音频文件。
 
 summary:
-reference generation + keyframe completion. The target video depicts a tense standoff where the black ant Diandian intimidates a group of red ants with a dismissive threat, causing them to flee in panic towards the high ground—the same direction Diandian originally came from.
+reference generation + keyframe completion + audio reference. 目标视频描绘了一场紧张的对峙，黑蚁点点用轻蔑的威胁恐吓一群红蚁，使它们惊慌地向高地逃窜——正是点点最初来的方向。点点的内心独白（遵循 <Audio 1> 的音色）揭示了他的轻蔑。
 
 retention_analysis:
-<Subject 1>: fully_preserved — maintain Diandian's black carapace color, arrogant posture, deliberate movements, and distinctive smoke-exhaling mannerism throughout all shots.
-<Subject 2>: partially_preserved — preserve the red ant captain's wounded state and red coloration; its role is to be carried away by subordinates.
-<Subject 3>: partially_preserved — preserve the red ant soldiers' red coloration and panicked movement style; their role is to flee en masse.
-<Picture 1>: fully_preserved — the opening frame must match the composition and subject positioning of the reference image.
-<Picture 2>: weak_reference — use the spatial relationship between the two ant groups as a general guide for the standoff composition.
-<Picture 3>: attribute_transfer — transfer the red ants' color palette and scale from the reference to all red ant subjects in the video.
+<Subject 1>: fully_preserved — 保持点点黑色甲壳颜色、傲慢姿态、从容动作和独特的吐烟习惯贯穿所有镜头。
+<Subject 2>: partially_preserved — 保留红蚁队长的受伤状态和红色；其角色是被部下抬走。
+<Subject 3>: partially_preserved — 保留红蚁士兵的红色和惊慌运动风格；其角色是集体逃跑。
+<Picture 1>: fully_preserved — 开场帧必须匹配参考图的构图和主体位置。
+<Picture 2>: weak_reference — 仅以两组蚂蚁的空间关系作为对峙构图的大致参考。
+<Picture 3>: attribute_transfer — 将参考图中红蚁的颜色和体型比例迁移到视频中所有红蚁主体。
+<Audio 1>: reference — 内心独白和台词遵循 <Audio 1> 的缓慢、沙哑音色和轻蔑语气，但内容为原创，不从源音频复制。
 
 detailed_description:
-A tense, Western-standoff-style scene between two ant colonies, captured in cinematic medium and close-up shots.
-[0s-2s] Medium shot of <Subject 1>, Diandian, standing alone atop a small dusty mound, silhouetted against a bright sky. He takes a long, deliberate pause after a prior commotion, a thin wisp of smoke lazily curling from his mandibles as he waits in oppressive silence. <Subject 2> and <Subject 3> are visible in the lower foreground, cowering and disoriented.
-[2s-4s] Close-up on <Subject 1> as he slowly, contemptuously expels a perfect drifting smoke ring. He sneers with undisguised disdain and speaks in a slow, gritty tone: "我数到三，如果你到时候还没从我视线里消失——" He deliberately trails off, leaving the threat unfinished and hanging in the air.
-[4s-6s] <Subject 3>, the surrounding red ants, immediately break into a panicked frenzy. Two of them frantically hoist <Subject 2>, the wounded captain, onto their shoulders and bolt. The group scrambles desperately, legs scratching against the dirt, towards a steep embankment on the higher ground.
-[6s-8s] <Subject 3> scurries over the crest of the embankment at full speed, <Subject 2> still being carried along. In the blink of an eye, their tiny silhouettes vanish completely over the horizon, disappearing exactly into the same path that <Subject 1> originally came from. <Subject 1> remains motionless, watching them flee.
+一个紧张的西部对峙风格场景，发生在两个蚁群之间，采用电影感的中景和特写镜头，并叠加一层遵循 <Audio 1> 音色的内心独白。
+[0s-2s] 中景：<Subject 1> 点点独自站在一个小土丘上，逆光剪影。他在之前的骚动后停顿了很久，一缕细烟懒洋洋地从他的上颚卷曲升起，在压抑的寂静中等待。<Subject 2> 和 <Subject 3> 在前景下方可见，畏缩而迷失方向。
+[2s-4s] 特写：<Subject 1>（S1）缓慢而轻蔑地吐出一个完美的烟圈。他带着毫不掩饰的鄙夷冷笑，用缓慢沙哑的语调说：<d>[中文] 我数到三，如果你到时候还没从我视线里消失——</d> 他故意拖长尾音，让威胁悬在空中。
+[4s-6s] <Subject 3>（周围的红蚁）立刻陷入恐慌。其中两只疯狂地将 <Subject 2>（受伤的队长）抬上肩，狂奔而去。蚁群拼命乱窜，腿刮擦泥土，朝着高处的陡坡逃去。
+[6s-8s] <Subject 3> 全速越过陡坡顶部，<Subject 2> 仍被抬着。转眼间，它们微小的身影完全消失在地平线上，恰好消失在 <Subject 1> 最初来的同一条路上。<Subject 1> 纹丝不动，看着它们逃跑。他 (S1) says an off-screen voiceover：<d>[中文] 什么玩意，迟早灭了你们！</d>
 
 overall_soundscape:
-The whisper of dry wind across sun-baked soil, a soft hissing exhalation of smoke, followed by frantic rustling and scratching of multiple tiny legs scrambling against dirt and pebbles, gradually fading into a distant, echoing void.
+干燥的风吹过日晒的土壤，轻微的吐烟嘶声，随后是无数细小虫腿刮擦泥土和碎石的慌乱沙沙声，逐渐消失在遥远空旷的回响中。
 
 non_diegetic_music:
 N/A
 ```
 
+---
+
 ## 执行检查清单（输出前自检）
 
 1. □ 六个字段是否按 `subject_definitions` → `summary` → `retention_analysis` → `detailed_description` → `overall_soundscape` → `non_diegetic_music` 的绝对顺序排列？
 2. □ `subject_definitions` 中定义的所有标签，在后续字段中是否保持完全一致？
-3. □ `summary` 是否包含任务类型前缀（如 `reference generation`）？
-4. □ `retention_analysis` 中每个标签是否单独成行，并使用了标准保留标记（`fully_preserved` / `partially_preserved` / `attribute_transfer` / `weak_reference`）？
-5. □ `detailed_description` 的总时长是否在 4-15 秒之间？
+3. □ `summary` 是否包含任务类型前缀（如 `reference generation`、`audio reference`）？
+4. □ `retention_analysis` 中每个标签是否单独成行，并使用了标准保留标记（`fully_preserved` / `partially_preserved` / `attribute_transfer` / `weak_reference` / `reference`）？
+5. □ `detailed_description` 的总时长是否与「标准输入」中的总时长一致？
 6. □ 时间码是否使用了 `[Xs-Ys]` 格式？
 7. □ 画面描述是否为纯视觉语言，可直接转化为画面，无元语言表述？
 8. □ `overall_soundscape` 是否有至少 1-4 句环境音描述？
 9. □ `non_diegetic_music` 是否明确填写了背景音乐或 `N/A`？
 10. □ 所有描述聚焦于动态过程，无静态画面堆砌？
-11. □ 六个字段的正文是否全部使用英文（对话/歌词/屏幕文字除外）？
+11. □ 若使用了内心独白，是否明确角色声音以 `(Sx) says an off-screen voiceover` 进入，并绑定 `(Sx)`？
+12. □ 若提供了音色参考，`<Audio N>` 是否在 `subject_definitions` 中定义并绑定 `(Sx)`，在 `retention_analysis` 中标记为 `reference`？
+13. □ 若指定了结构参考，`<Video N>` 是否只描述剪辑节奏/运镜，未提及具体画面内容？
+14. □ 若指定了首尾帧约束，`<Picture N>` 是否写明了作为首帧/尾帧/关键帧的对应 shot？
+15. □ 若提供了「上一个镜头画面描述」，当前 `detailed_description` 的 `[0s-...]` 是否以视觉方式呈现了上一镜头结尾的主体状态、位置、运动趋势、光影环境？
+16. □ 运镜变化是否有环境或主体事件作为切换依据，而非凭空跳变？
+17. □ 上一镜头描述中出现的参考标签，是否在当前 `subject_definitions` 中定义且名称完全一致？
+18. □ 输出中是否完全避免了“承接上一镜”“延续视角”等元语言表述？
+19. □ 若提供了「上一个镜头画面描述」，主体运动状态（速度、方向、姿态）是否与上一镜头结尾保持物理连续，没有无理由的静止或变向？
+20. □ 若输入内容中出现自动识别关键词，是否已自动启用对应格式，且未在高级选项中重复声明？
+21. □ 每个 [Xs-Ys] 分段中的新动作是否都明确写出了一种符合当前动作的具体的镜头运动方式（如推、拉、摇、移、跟、升降、手持晃动、环绕等），而不仅仅标注景别（中景、近景、特写）？若为固定镜头，是否明确写出“镜头固定/静止”？若画面转移，是否明确写出“镜头切换/镜头硬切”？
+22. □ 每个 [Xs-Ys] 分段内的动作量是否符合现实规律？是否存在超时堆叠、压缩主体动作或与剧情无关的新增动作？
+23. □ 六个字段的正文是否全部使用中文？
 
+
+subject_definitions:
+<Subject 1> 是少年小晨，定义自 <Picture 2>，十四五岁，身形偏瘦但站得笔直，黑色短发，穿洗得发白的灰色粗布上衣，袖口挽到小臂，腰间系旧皮带并挂着磨亮的小皮袋，脚踩沾草屑的旧布鞋。
+<Subject 2> 是一把短刀，定义自 <Picture 3>，刀身泛着冷光，被小晨握在右手中。
+<Subject 3> 是一头小野猪，站在浅溪中，鬃毛湿润，前腿搅出层层涟漪，呈愤怒对峙姿态。
+<Picture 1> 是 <Picture 1>，用作视频首帧，定义自提供的参考图。
+<Picture 2> 是 <Picture 2>，用作视频首帧的构图与主体锚点，定义自提供的参考图。
+<Picture 3> 是 <Picture 3>，用作视频首帧的构图与主体锚点，定义自提供的参考图。
+
+summary:
+reference generation + keyframe completion. 目标视频描绘浅溪边的紧张对峙：小野猪面对纹丝不动、手持短刀的小晨发出威吓，随后低吼着加速冲向对方，溪水在它脚下炸开，首帧构图与 <Picture 1>/<Picture 2>/<Picture 3> 完全一致。
+
+retention_analysis:
+<Subject 1>: fully_preserved — 小晨的外貌、灰布上衣、挽袖、皮袋与布鞋全程保持一致，站姿笔直、手持短刀、纹丝不动。
+<Subject 2>: fully_preserved — 短刀始终被小晨握在右手，刀身反光随动作轻微闪烁。
+<Subject 3>: fully_preserved — 小野猪的体型、湿鬃毛、愤怒神态全程一致，情绪从对峙升级为冲锋。
+<Picture 1>: fully_preserved — 视频首帧必须与参考图的构图、主体位置、溪水涟漪和野猪姿态完全一致。
+<Picture 2>: fully_preserved — 首帧中小晨的形象、服装与持刀姿势必须与参考图一致。
+<Picture 3>: fully_preserved — 首帧中短刀的外形、反光与小晨右手握持的位置必须与参考图一致。
+
+detailed_description:
+一段日式动画风格的野外对峙场景，画面色彩清新、线条干净，溪水的透明质感与草地碎石细节细腻，整体气氛从紧绷的对峙瞬间爆发出冲击性的动感。
+[0s-2s] 全景镜头固定，与 <Picture 1>/<Picture 2>/<Picture 3> 的首帧构图一致：<Subject 3> 站在浅溪中央，前腿刨动水面，掀起细碎的水花与涟漪；它低头压低前身，鼻孔喷出粗气，湿漉漉的鬃毛微微炸起，死死盯着画面左侧的 <Subject 1>。<Subject 1> 站在溪边碎石岸滩上，右手紧握 <Subject 2>，刀刃在阳光下闪着冷光，身体一动不动，衣角被风吹得轻轻摆动。镜头缓慢向前推进，水面涟漪一圈圈扩散到两岸。
+[2s-4s] 中景跟拍：<Subject 3> 猛地仰头发出一声尖锐的咆哮，随后四蹄发力蹬踏溪水，从溪中央朝着 <Subject 1> 的方向慢跑而来，蹄子每一次落下都砸出大片水花，水珠在逆光中四散飞溅，镜头随 <Subject 3> 的跑动轨迹横向移动。
+[4s-6s] 低角度仰拍镜头快速推近：画面左侧是溪水，<Subject 1> 小晨脚下右侧躺着晕死过去的灰兔子，<Subject 3> 继续往碎石岸滩方向冲，但在水里跑得很慢，蹄声变得沉闷而急促，鬃毛上的水珠甩落，它张着嘴露出獠牙，向 <Subject 1> 不断逼近并一跃而起（在<Subject 3> 小野猪跃起的瞬间镜头进入慢动作）；<Subject 1> 开始面露惊慌，想要转身但往后跌倒在草地上，右手还握着短刀。
+
+overall_soundscape:
+清澈溪水持续流动与泛起涟漪的潺潺水声，小野猪鼻孔喷气的粗重呼哧声、蹄子刨水的哗啦声，随后是四蹄冲刺时踏碎水面与击打碎石的密集急促声响，水花飞溅声由远及近不断放大。
+
+non_diegetic_music:
+N/A
