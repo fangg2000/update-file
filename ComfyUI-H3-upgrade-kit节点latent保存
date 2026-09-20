@@ -1,0 +1,330 @@
+1、__init__.py
+from .nodes_latent_upscale import H3KitLatentUpscale3D
+from .nodes_tiled_sampler import H3KitTiledSampler
+from .nodes_motion import H3KitMotionBridge, H3KitAVTrim
+from .nodes_vae_decode import H3KitVAEDecodeTiled
+from .nodes_selflift import H3KitSelfLiftSampler, H3KitSelfLiftAVJoin, H3KitSelfLiftLatentRestore
+
+NODE_CLASS_MAPPINGS = {
+    "H3KitLatentUpscale3D": H3KitLatentUpscale3D,
+    "H3KitTiledSampler": H3KitTiledSampler,
+    "H3KitMotionBridge": H3KitMotionBridge,
+    "H3KitAVTrim": H3KitAVTrim,
+    "H3KitVAEDecodeTiled": H3KitVAEDecodeTiled,
+    "H3KitSelfLiftSampler": H3KitSelfLiftSampler,
+    "H3KitSelfLiftAVJoin": H3KitSelfLiftAVJoin,
+    "H3KitSelfLiftLatentRestore": H3KitSelfLiftLatentRestore,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "H3KitLatentUpscale3D": "H3Kit 3D 潜空间放大",
+    "H3KitTiledSampler": "H3Kit 高清分块采样",
+    "H3KitMotionBridge": "H3Kit 动作续接",
+    "H3KitAVTrim": "H3Kit 音画同步裁剪",
+    "H3KitVAEDecodeTiled": "H3Kit VAE 分块解码",
+    "H3KitSelfLiftSampler": "H3Kit SelfLift K采样器",
+    "H3KitSelfLiftAVJoin": "H3Kit SelfLift 续接音画拼接",
+    "H3KitSelfLiftLatentRestore": "H3Kit SelfLift Latent 恢复",
+}
+
+__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+
+2、nodes_selflift.py
+"""可串联的 SelfLift K采与解码后的音画拼接。"""
+
+import torch
+import torch.nn.functional as F
+import torchaudio.functional
+import os
+import json
+import folder_paths
+import time
+
+import comfy.model_management as mm
+from comfy.nested_tensor import NestedTensor
+
+import comfy.samplers
+from comfy_extras.nodes_custom_sampler import BasicScheduler
+
+from .nodes_latent_upscale import list_upscale_weights
+#from .selflift_sampling import SEGMENT, progressive_sample
+from .selflift_sampling import LOW_CARRY, SEGMENT, progressive_sample
+from safetensors import safe_open
+from safetensors.torch import load_file, save_file
+
+def _unique_safetensors_path(path):
+    if not os.path.exists(path):
+        return path
+    base, ext = os.path.splitext(path)
+    i = 1
+    while True:
+        candidate = f"{base}_{i:05d}{ext}"
+        if not os.path.exists(candidate):
+            return candidate
+        i += 1
+
+
+def save_latent_safetensors(latent, prefix):
+    prefix = (prefix or "").strip()
+    if not prefix:
+        return None
+
+    # 允许用户写 foo 或 foo.safetensors
+    if prefix.endswith(".safetensors"):
+        prefix = prefix[:-len(".safetensors")]
+
+    out_dir = os.path.join(folder_paths.get_output_directory(), "latent")
+    os.makedirs(out_dir, exist_ok=True)
+
+    # 过滤 ..，保证仍然写在 output/latent 下面
+    parts = [p for p in prefix.replace("\\", "/").split("/") if p not in ("", ".", "..")]
+    if not parts:
+        parts = ["latent"]
+
+    path = os.path.join(out_dir, *parts[:-1], f"{parts[-1]}_{int(time.time())}") + ".safetensors"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    path = _unique_safetensors_path(path)
+
+    samples = latent["samples"]
+    tensors = {}
+
+    if samples.is_nested:
+        video, audio = samples.unbind()
+        tensors["video"] = video.detach().cpu().contiguous().clone()
+        tensors["audio"] = audio.detach().cpu().contiguous().clone()
+    else:
+        tensors["samples"] = samples.detach().cpu().contiguous().clone()
+
+    low_carry = latent.get(LOW_CARRY)
+    if low_carry is not None:
+        tensors["low_carry"] = low_carry.detach().cpu().contiguous().clone()
+
+    metadata = {"format": "h3kit_selflift_latent"}
+    segment = latent.get(SEGMENT)
+    if segment is not None:
+        metadata["segment"] = json.dumps(segment, ensure_ascii=False, separators=(",", ":"))
+
+    save_file(tensors, path, metadata=metadata)
+    print(f"[H3Kit SelfLift] saved latent -> {path}")
+    return path
+
+def load_latent_safetensors(file_path):
+    """把 save_latent_safetensors 写出的文件恢复为 SelfLift K采 输出的 LATENT。"""
+    file_path = (file_path or "").strip()
+    if not file_path:
+        raise ValueError("请指定要恢复的 .safetensors 文件路径。")
+
+    # 相对路径按 output/latent 解析
+    if not os.path.isabs(file_path):
+        file_path = os.path.join(folder_paths.get_output_directory(), "latent", file_path)
+    if not file_path.endswith(".safetensors"):
+        file_path = file_path + ".safetensors"
+    if not os.path.exists(file_path):
+        raise ValueError(f"latent 文件不存在：{file_path}")
+
+    with safe_open(file_path, framework="pt") as f:
+        meta = f.metadata() or {}
+    data = load_file(file_path)
+
+    device = mm.intermediate_device()
+    dtype = mm.intermediate_dtype()
+
+    if "video" in data and "audio" in data:
+        video = data["video"].to(device=device, dtype=dtype)
+        audio = data["audio"].to(device=device, dtype=dtype)
+        samples = NestedTensor([video, audio])
+    elif "samples" in data:
+        samples = data["samples"].to(device=device, dtype=dtype)
+    else:
+        raise ValueError("safetensors 中缺少 video/audio 或 samples。")
+
+    result = {"samples": samples}
+
+    if "low_carry" in data:
+        result[LOW_CARRY] = data["low_carry"].to(device=device, dtype=dtype)
+
+    segment_raw = meta.get("segment")
+    if segment_raw:
+        result[SEGMENT] = json.loads(segment_raw)
+
+    # 采样器输出时已去掉 noise_mask，这里刻意不恢复，保持结构一致。
+    return result
+
+class H3KitSelfLiftSampler:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "positive": ("CONDITIONING",),
+                "negative": ("CONDITIONING",),
+                "latent_image": ("LATENT", {"tooltip": "本段目标高清 H3 音视频 latent；长度代表本段新增帧数。续接时只在头部增加17帧的整数倍上下文，拼接后保留原定新增长度，不补视频尾帧。"}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": True}),
+                "steps": ("INT", {"default": 8, "min": 2, "max": 10000}),
+                "cfg": ("FLOAT", {"default": 1.0, "min": 0, "max": 100, "step": 0.1}),
+                "sampler_name": (["euler"], {"default": "euler",
+                    "tooltip": "当前 SelfLift 交接使用 Euler 更新公式，只支持标准 euler；其他算法需要单独适配交接与历史状态。"}),
+                "scheduler": (comfy.samplers.SCHEDULER_NAMES, {"default": "simple"}),
+                "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01,
+                    "tooltip": "降噪强度，仅在未连接外部 sigmas 时生效。低于 1 时保留更多输入 latent 内容；0 时直接返回输入，不执行二采或续接。"}),
+                "high_resolution_steps": ("INT", {"default": 2, "min": 1, "max": 9999,
+                    "tooltip": "总步数中的高清部分。8 步、高清 2 步表示低清 6 步＋高清 2 步；固定使用 Euler。"}),
+                "lowres_scale": ("FLOAT", {"default": 0.5, "min": 0.25, "max": 1.0, "step": 0.05,
+                    "tooltip": "低清宽高比例。前后段须使用相同设置；整段仍使用latent放大，接context_vae时仅把实际尾部画面缩小后编码为低清上下文。"}),
+                "upscale_weights": (list_upscale_weights(),),
+                "overlap_frames": ("INT", {"default": 17, "min": 17, "max": 3587, "step": 17,
+                    "tooltip": "额外增加的头部上下文：17、34、51……帧，对应前段尾部的5、10、15……个latent时间步；不占用本段新增帧数。"}),
+                "continue_audio": ("BOOLEAN", {"default": True,
+                    "tooltip": "续接前段尾音，最后 8 个音频 token 平滑释放。已锁定的输入音轨优先。"}),
+            },
+            "optional": {
+                "previous_latent": ("LATENT", {"tooltip": "直接接前一个 H3Kit SelfLift K采的 sampled_latent；同时携带低清和高清状态。"}),
+                "sigmas": ("SIGMAS", {"tooltip": "可选外部调度；连接后取代 steps/scheduler/denoise，总步数和降噪强度由外部调度决定。"}),
+                "spatial_tiles": ("BOOLEAN", {"default": False,
+                    "label_on": "高清采样分块：开启", "label_off": "高清采样分块：关闭",
+                    "tooltip": "仅对 SelfLift 高清采样阶段沿长边重叠分块，支持视频/音频遮罩及固定上下文续接。不影响 latent 放大或 VAE 解码。"}),
+                "minimum_tiles": ("INT", {"default": 4, "min": 2, "max": 8,
+                    "tooltip": "高清采样的最少分块数，按显存预算增加到最多 8 块；小画面受网格限制可能更少。音频取第一块预测，不支持 ControlNet。"}),
+                "context_vae": ("VAE", {"tooltip": "连接H3视频VAE，以前段最终高清画面作为统一来源：原尺寸编码高清上下文，缩小画面后编码低清上下文，供锁定前缀和连续运动引导使用。不连接则沿用原生latent尾部；只处理上下文，不做整段像素校正。"}),
+                "previous_frames": ("IMAGE", {"tooltip": "可选：前段实际解码画面，配合context_vae避免再次解码高清前段；不连接则自动解码。"}),
+                "latent_save_prefix": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": "非空时把 sampled_latent 保存到 output/latent/<前缀>.safetensors；空则不保存。"
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("LATENT",)
+    RETURN_NAMES = ("sampled_latent",)
+    FUNCTION = "sample"
+    CATEGORY = "H3 Upgrade Kit/采样"
+    DESCRIPTION = "低清采样→学习型latent放大→高清续采。前段输出接previous_latent；两个阶段各自锁定连续重叠区并加入整段运动引导，单张首帧转为外观参考；放大后按高清尾部校正新画面。解码后接‘SelfLift续接音画拼接’。"
+
+    def sample(self, model, positive, negative, latent_image, seed, steps, cfg, scheduler,
+               high_resolution_steps, lowres_scale, upscale_weights, overlap_frames,
+               continue_audio, previous_latent=None, sigmas=None, denoise=1.0, sampler_name="euler",
+               spatial_tiles=False, minimum_tiles=4, context_vae=None, previous_frames=None, latent_save_prefix=""):
+        if sigmas is None:
+            if denoise == 0:
+                result = latent_image
+                if latent_save_prefix:
+                    save_latent_safetensors(result, latent_save_prefix)
+                return (result,)
+            sigmas = BasicScheduler.execute(model, scheduler, steps, denoise)[0]
+
+        result = progressive_sample(
+            model, positive, negative, latent_image, sigmas, seed, cfg,
+            high_resolution_steps, lowres_scale, upscale_weights,
+            previous_latent, overlap_frames, continue_audio, sampler_name=sampler_name,
+            spatial_tiles=spatial_tiles, minimum_tiles=minimum_tiles,
+            context_vae=context_vae, previous_frames=previous_frames
+        )
+
+        if latent_save_prefix:
+            save_latent_safetensors(result, latent_save_prefix)
+
+        return (result,)
+
+
+def fit_audio(waveform, length):
+    if waveform.shape[-1] < length:
+        return F.pad(waveform, (0, length - waveform.shape[-1]))
+    return waveform[..., :length]
+
+
+class H3KitSelfLiftAVJoin:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "sampled_latent": ("LATENT", {"tooltip": "本段 SelfLift K采输出，用于读取实际重叠和音频续接信息。"}),
+                "decoded_frames": ("IMAGE", {"tooltip": "本段完整解码画面，不要预先裁掉重叠。"}),
+            },
+            "optional": {
+                "decoded_audio": ("AUDIO",),
+                "previous_frames": ("IMAGE", {"tooltip": "前一拼接节点的 images，或第一段完整解码画面。"}),
+                "previous_audio": ("AUDIO", {"tooltip": "与 previous_frames 同步的累积音频；多段视频可连续串联。"}),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE", "AUDIO")
+    RETURN_NAMES = ("images", "audio")
+    FUNCTION = "join"
+    CATEGORY = "H3 Upgrade Kit/视频续接"
+    DESCRIPTION = "裁掉17帧整数倍的重复前缀，保留本段原定新增帧数；启用 Soft AV 时用后段过渡音频替换前段对应尾音。按24fps对齐音频长度。"
+
+    def join(self, sampled_latent, decoded_frames, decoded_audio=None, previous_frames=None, previous_audio=None):
+        info = sampled_latent.get(SEGMENT)
+        if info is None:
+            raise ValueError("请连接 H3Kit SelfLift K采的原始输出，以读取续接信息。")
+        if decoded_frames.shape[0] != info["frames"]:
+            raise ValueError("解码帧数与采样 latent 不匹配，请连接本段未经裁剪的完整画面。")
+        overlap = info["overlap_frames"]
+        joined = previous_frames is not None
+        if joined and not overlap:
+            raise ValueError("本段未接入前段 latent；拼接前请先连接 K采的 previous_latent。")
+        if previous_audio is not None and not joined:
+            raise ValueError("previous_audio 需要匹配的 previous_frames。")
+        delivery = info["delivery_frames"]
+        end = overlap + delivery
+        if delivery <= 0 or end > info["frames"]:
+            raise ValueError("本段有效长度与采样帧数不匹配。")
+        frames = decoded_frames[overlap:end].clone()
+        if joined:
+            if previous_frames.shape[0] < overlap:
+                raise ValueError("前段画面短于重叠区。")
+            frames = torch.cat((previous_frames, frames.to(previous_frames)), dim=0)
+        if decoded_audio is None and previous_audio is None:
+            return frames, None
+        source = decoded_audio if decoded_audio is not None else previous_audio
+        sr = source["sample_rate"]
+        template = source["waveform"]
+        current_length = round(end * sr / 24)
+        current = (decoded_audio["waveform"] if decoded_audio is not None
+                   else template.new_zeros((*template.shape[:-1], current_length)))
+        current = fit_audio(current, current_length)
+        cut = round(overlap * sr / 24)
+        if joined:
+            prior_length = round(previous_frames.shape[0] * sr / 24)
+            if previous_audio is None:
+                prior = template.new_zeros((*template.shape[:-1], prior_length))
+            else:
+                prior = previous_audio["waveform"].to(template)
+                if previous_audio["sample_rate"] != sr:
+                    prior = torchaudio.functional.resample(prior, previous_audio["sample_rate"], sr)
+                if prior.shape[:-1] != current.shape[:-1]:
+                    raise ValueError("前后段音频的批次和声道数必须一致。")
+                prior = fit_audio(prior, prior_length)
+            if info["soft_audio"] and decoded_audio is not None and previous_audio is not None:
+                waveform = torch.cat((prior[..., :prior_length - cut], current), dim=-1)
+            else:
+                waveform = torch.cat((prior, current[..., cut:]), dim=-1)
+        else:
+            waveform = current[..., cut:]
+        waveform = fit_audio(waveform, round(frames.shape[0] * sr / 24)).clone()
+        return frames, {"waveform": waveform, "sample_rate": sr}
+        
+class H3KitSelfLiftLatentRestore:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "file_path": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": "要恢复的 .safetensors 文件；相对路径按 output/latent 解析，可省略扩展名。"
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("LATENT",)
+    RETURN_NAMES = ("latent",)
+    FUNCTION = "restore"
+    CATEGORY = "H3 Upgrade Kit/采样"
+    DESCRIPTION = ("恢复 H3Kit SelfLift K采保存的 latent。结构（samples / LOW_CARRY / SEGMENT）"
+                   "与采样器输出完全一致，可直接接 K采 的 previous_latent，也可继续传给 "
+                   "H3Kit SelfLift 续接音画拼接。")
+
+    def restore(self, file_path):
+        return (load_latent_safetensors(file_path),)
