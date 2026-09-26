@@ -39,6 +39,8 @@ import os
 import json
 import folder_paths
 import time
+import pickle
+import base64
 
 import comfy.model_management as mm
 from comfy.nested_tensor import NestedTensor
@@ -52,6 +54,7 @@ from .selflift_sampling import LOW_CARRY, SEGMENT, progressive_sample
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 
+
 def _unique_safetensors_path(path):
     if not os.path.exists(path):
         return path
@@ -64,6 +67,21 @@ def _unique_safetensors_path(path):
         i += 1
 
 
+def _resolve_device(device_str):
+    """尽量把张量放回保存时的 device；不可用时回退到 intermediate_device。"""
+    if not device_str:
+        return mm.intermediate_device()
+    try:
+        dev = torch.device(device_str)
+        if dev.type == "cuda" and not torch.cuda.is_available():
+            return mm.intermediate_device()
+        if dev.type == "mps" and not torch.backends.mps.is_available():
+            return mm.intermediate_device()
+        return dev
+    except Exception:
+        return mm.intermediate_device()
+
+
 def save_latent_safetensors(latent, prefix):
     prefix = (prefix or "").strip()
     if not prefix:
@@ -73,43 +91,59 @@ def save_latent_safetensors(latent, prefix):
     if prefix.endswith(".safetensors"):
         prefix = prefix[:-len(".safetensors")]
 
-    out_dir = os.path.join(folder_paths.get_output_directory(), "latent")
-    os.makedirs(out_dir, exist_ok=True)
+    out_dir = folder_paths.get_output_directory()
 
-    # 过滤 ..，保证仍然写在 output/latent 下面
+    # 统一放到 output/latent/ 下，与恢复时的相对路径解析保持一致
     parts = [p for p in prefix.replace("\\", "/").split("/") if p not in ("", ".", "..")]
     if not parts:
         parts = ["latent"]
+    elif parts[0] != "latent":
+        parts = ["latent"] + parts
 
     path = os.path.join(out_dir, *parts[:-1], f"{parts[-1]}_{int(time.time())}") + ".safetensors"
     os.makedirs(os.path.dirname(path), exist_ok=True)
     path = _unique_safetensors_path(path)
 
-    samples = latent["samples"]
     tensors = {}
+    metadata = {"format": "h3kit_selflift_latent_v2"}
+    non_tensor_data = {}
+    devices = {}
 
-    if samples.is_nested:
-        video, audio = samples.unbind()
-        tensors["video"] = video.detach().cpu().contiguous().clone()
-        tensors["audio"] = audio.detach().cpu().contiguous().clone()
-    else:
-        tensors["samples"] = samples.detach().cpu().contiguous().clone()
+    for key, value in latent.items():
+        if isinstance(value, NestedTensor):
+            # NestedTensor 拆成 video / audio 保存
+            video, audio = value.unbind()
+            tensors["__samples_video__"] = video.detach().cpu().contiguous().clone()
+            tensors["__samples_audio__"] = audio.detach().cpu().contiguous().clone()
+            devices["__samples_video__"] = str(video.device)
+            devices["__samples_audio__"] = str(audio.device)
+            metadata["samples_nested"] = "true"
+            metadata["samples_key"] = key
+        elif isinstance(value, torch.Tensor):
+            tensors[key] = value.detach().cpu().contiguous().clone()
+            devices[key] = str(value.device)
+        else:
+            non_tensor_data[key] = value
 
-    low_carry = latent.get(LOW_CARRY)
-    if low_carry is not None:
-        tensors["low_carry"] = low_carry.detach().cpu().contiguous().clone()
+    if non_tensor_data:
+        metadata["non_tensor_data"] = base64.b64encode(
+            pickle.dumps(non_tensor_data, protocol=pickle.HIGHEST_PROTOCOL)
+        ).decode("ascii")
 
-    metadata = {"format": "h3kit_selflift_latent"}
-    segment = latent.get(SEGMENT)
-    if segment is not None:
-        metadata["segment"] = json.dumps(segment, ensure_ascii=False, separators=(",", ":"))
+    if devices:
+        metadata["devices"] = json.dumps(devices, ensure_ascii=False)
 
     save_file(tensors, path, metadata=metadata)
     print(f"[H3Kit SelfLift] saved latent -> {path}")
     return path
 
+
 def load_latent_safetensors(file_path):
-    """把 save_latent_safetensors 写出的文件恢复为 SelfLift K采 输出的 LATENT。"""
+    """把 save_latent_safetensors 写出的文件恢复为 SelfLift K采 输出的 LATENT。
+
+    与旧版不同：这里会恢复所有键、原始 dtype、原始 device，并保留非张量数据的
+    Python 类型（例如 SEGMENT 中的 tuple），因此可以直接接 previous_latent。
+    """
     file_path = (file_path or "").strip()
     if not file_path:
         raise ValueError("请指定要恢复的 .safetensors 文件路径。")
@@ -126,29 +160,59 @@ def load_latent_safetensors(file_path):
         meta = f.metadata() or {}
     data = load_file(file_path)
 
-    device = mm.intermediate_device()
-    dtype = mm.intermediate_dtype()
+    result = {}
 
-    if "video" in data and "audio" in data:
-        video = data["video"].to(device=device, dtype=dtype)
-        audio = data["audio"].to(device=device, dtype=dtype)
+    # 恢复非张量数据（SEGMENT 等）
+    non_tensor_raw = meta.get("non_tensor_data")
+    if non_tensor_raw:
+        non_tensor_data = pickle.loads(base64.b64decode(non_tensor_raw))
+        result.update(non_tensor_data)
+
+    # 恢复 device 映射
+    devices = {}
+    devices_raw = meta.get("devices")
+    if devices_raw:
+        try:
+            devices = json.loads(devices_raw)
+        except Exception:
+            devices = {}
+
+    def restore_device(tensor, key):
+        dev_str = devices.get(key)
+        if dev_str:
+            dev = _resolve_device(dev_str)
+            return tensor.to(device=dev)
+        return tensor.to(device=mm.intermediate_device())
+
+    # 恢复 samples
+    samples_nested = meta.get("samples_nested") == "true"
+    if samples_nested:
+        video = data.get("__samples_video__")
+        audio = data.get("__samples_audio__")
+        if video is None or audio is None:
+            raise ValueError("safetensors 中缺少 NestedTensor 的 video/audio。")
+        video = restore_device(video, "__samples_video__")
+        audio = restore_device(audio, "__samples_audio__")
         samples = NestedTensor([video, audio])
-    elif "samples" in data:
-        samples = data["samples"].to(device=device, dtype=dtype)
+        result["samples"] = samples
     else:
-        raise ValueError("safetensors 中缺少 video/audio 或 samples。")
+        if "samples" in data:
+            samples = data["samples"]
+            samples = restore_device(samples, "samples")
+            result["samples"] = samples
+        else:
+            raise ValueError("safetensors 中缺少 samples。")
 
-    result = {"samples": samples}
+    # 恢复其他张量键
+    for key, tensor in data.items():
+        if key in ("__samples_video__", "__samples_audio__", "samples"):
+            continue
+        restored = restore_device(tensor, key)
+        result[key] = restored
 
-    if "low_carry" in data:
-        result[LOW_CARRY] = data["low_carry"].to(device=device, dtype=dtype)
-
-    segment_raw = meta.get("segment")
-    if segment_raw:
-        result[SEGMENT] = json.loads(segment_raw)
-
-    # 采样器输出时已去掉 noise_mask，这里刻意不恢复，保持结构一致。
+    # 采样器输出时已去掉 noise_mask，这里不再刻意删除；如果保存时有就会恢复。
     return result
+
 
 class H3KitSelfLiftSampler:
     @classmethod
@@ -304,7 +368,8 @@ class H3KitSelfLiftAVJoin:
             waveform = current[..., cut:]
         waveform = fit_audio(waveform, round(frames.shape[0] * sr / 24)).clone()
         return frames, {"waveform": waveform, "sample_rate": sr}
-        
+
+
 class H3KitSelfLiftLatentRestore:
     @classmethod
     def INPUT_TYPES(cls):
@@ -322,9 +387,9 @@ class H3KitSelfLiftLatentRestore:
     RETURN_NAMES = ("latent",)
     FUNCTION = "restore"
     CATEGORY = "H3 Upgrade Kit/采样"
-    DESCRIPTION = ("恢复 H3Kit SelfLift K采保存的 latent。结构（samples / LOW_CARRY / SEGMENT）"
-                   "与采样器输出完全一致，可直接接 K采 的 previous_latent，也可继续传给 "
-                   "H3Kit SelfLift 续接音画拼接。")
+    DESCRIPTION = ("恢复 H3Kit SelfLift K采保存的 latent。现在会完整恢复所有键、"
+                   "原始 dtype 和 device，并保留 SEGMENT 等非张量数据的 Python 类型，"
+                   "可直接接 K采 的 previous_latent，也可继续传给 H3Kit SelfLift 续接音画拼接。")
 
     def restore(self, file_path):
         return (load_latent_safetensors(file_path),)
